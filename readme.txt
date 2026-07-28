@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.5.2 =
+* New-install defaults tuned for hands-off use: Max Outgoing Links Per Post 2 (was 3), Auto Insert ON, and Auto-Insert Min Confidence 75 (aligned with the AI verify threshold so verified links actually insert). Existing installs keep their saved settings.
+
 = 2.5.1 =
 * Self-updating. The plugin can now check a release source you control and update itself through the normal WordPress update screen, including the per-plugin "Enable auto-updates" toggle. Point AIIL_GITHUB_REPO at your repo to switch it on; the source is a swappable adapter (GitHub releases or your own JSON endpoint) so hosting can change later without a rewrite.
 

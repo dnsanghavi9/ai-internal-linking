@@ -12,7 +12,7 @@ class AIIL_Settings {
 			'provider'            => 'gemini',
 			'model'               => 'gemini-2.5-flash-lite', // used only for the AI anchor fallback
 			'api_key'             => '',
-			'max_outgoing_links'  => 3,
+			'max_outgoing_links'  => 2,
 			'match_top_k'         => 8,    // semantic neighbours retrieved per post
 			'min_doc_similarity'  => 55,   // 0-100; below this a pair isn't even an opportunity
 			'min_passage_score'   => 55,   // 0-100; a link needs a source passage at least this relevant
@@ -25,8 +25,8 @@ class AIIL_Settings {
 			'rerank_anchor_min'   => 70,   // 0-100; safety floor only — the AI picks the anchor, so
 			                               // this should stay low. Below it -> needs a human.
 			'auto_link_new'       => 1,    // when a post is published/edited, auto-prepare (+verify) its links in the background
-			'auto_insert'         => 0,
-			'auto_min_confidence' => 90,
+			'auto_insert'         => 1,    // insert kept links automatically, no manual review
+			'auto_min_confidence' => 75,   // aligns with rerank_pair_min so AI-verified links actually auto-insert
 			'batch_size'          => 20,
 		);
 	}
@@ -64,7 +64,7 @@ class AIIL_Settings {
 		$out['provider']            = sanitize_text_field( $input['provider'] ?? 'gemini' );
 		$out['model']               = sanitize_text_field( $input['model'] ?? 'gemini-2.5-flash-lite' );
 		$out['api_key']             = trim( (string) ( $input['api_key'] ?? '' ) );
-		$out['max_outgoing_links']  = max( 1, (int) ( $input['max_outgoing_links'] ?? 3 ) );
+		$out['max_outgoing_links']  = max( 1, (int) ( $input['max_outgoing_links'] ?? 2 ) );
 		$out['match_top_k']         = min( 50, max( 1, (int) ( $input['match_top_k'] ?? 8 ) ) );
 		$out['min_doc_similarity']  = min( 100, max( 0, (int) ( $input['min_doc_similarity'] ?? 55 ) ) );
 		$out['min_passage_score']   = min( 100, max( 0, (int) ( $input['min_passage_score'] ?? 55 ) ) );
@@ -77,7 +77,7 @@ class AIIL_Settings {
 		$out['rerank_anchor_min']   = min( 100, max( 0, (int) ( $input['rerank_anchor_min'] ?? 70 ) ) );
 		$out['auto_link_new']       = empty( $input['auto_link_new'] ) ? 0 : 1;
 		$out['auto_insert']         = empty( $input['auto_insert'] ) ? 0 : 1;
-		$out['auto_min_confidence'] = min( 100, max( 0, (int) ( $input['auto_min_confidence'] ?? 90 ) ) );
+		$out['auto_min_confidence'] = min( 100, max( 0, (int) ( $input['auto_min_confidence'] ?? 75 ) ) );
 		$out['batch_size']          = max( 1, min( 100, (int) ( $input['batch_size'] ?? 20 ) ) );
 		return $out;
 	}
