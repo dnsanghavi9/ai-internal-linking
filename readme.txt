@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.5.3 =
+* Links are never inserted into headings. Headings (and figure captions) are now excluded both when choosing where to link from and when writing the link — an internal link only ever lands in body copy, never an H1–H6, caption, or nav. Re-index posts to also stop headings being chosen as a link source.
+
 = 2.5.2 =
 * New-install defaults tuned for hands-off use: Max Outgoing Links Per Post 2 (was 3), Auto Insert ON, and Auto-Insert Min Confidence 75 (aligned with the AI verify threshold so verified links actually insert). Existing installs keep their saved settings.
 

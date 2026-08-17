@@ -22,6 +22,11 @@ class AIIL_Indexer {
 	 * @return string[]
 	 */
 	public static function split_passages( $content ) {
+		// Drop headings and captions before extracting passages, so a link is never anchored to
+		// heading text (the inserter also refuses to write into headings, but keeping them out of
+		// the passage set means they can't even be chosen as the place to link from).
+		$content = preg_replace( '/<h[1-6]\b[^>]*>.*?<\/h[1-6]>|<figcaption\b[^>]*>.*?<\/figcaption>/is', "\n\n", (string) $content );
+
 		$text = wp_strip_all_tags( (string) $content );
 		$text = html_entity_decode( $text, ENT_QUOTES, 'UTF-8' );
 		$text = trim( preg_replace( '/[ \t]+/u', ' ', $text ) );

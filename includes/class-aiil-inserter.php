@@ -143,11 +143,12 @@ class AIIL_Inserter {
 	 * Inject an <a> tag for the given anchor text into the post HTML.
 	 *
 	 * Strategy:
-	 * 1. Walk block-level chunks (paragraphs, list items, headings).
-	 * 2. For each chunk, strip tags and case-insensitively check for the AI-supplied sentence.
-	 * 3. When found, run a word-boundary regex replacement against the chunk's original HTML.
-	 *    This preserves block structure and avoids matches inside existing <a> tags.
-	 * 4. If sentence-aware location fails, fall back to the first valid occurrence in the whole content.
+	 * 1. "Shield" headings (and other non-body regions) so a link can NEVER be placed inside
+	 *    them — an internal link belongs in body copy, not an H2/H3, nav, caption, etc.
+	 * 2. Walk block-level chunks (paragraphs, list items, quotes, table/def cells), locate the
+	 *    AI-supplied sentence, and word-boundary replace the anchor there (never inside an <a>).
+	 * 3. If sentence-aware location fails, fall back to the first valid occurrence in the
+	 *    (still heading-shielded) content.
 	 */
 	public static function replace_anchor( $content, $sentence, $anchor, $url ) {
 		$anchor = trim( $anchor );
@@ -155,38 +156,55 @@ class AIIL_Inserter {
 			return $content;
 		}
 
+		// Replace headings / non-linkable regions with opaque placeholders so nothing inside
+		// them can match. They are restored verbatim at the end.
+		$shields   = array();
+		$protected = preg_replace_callback(
+			'/<h[1-6]\b[^>]*>.*?<\/h[1-6]>|<figcaption\b[^>]*>.*?<\/figcaption>|<(?:nav|thead)\b[^>]*>.*?<\/(?:nav|thead)>/is',
+			function ( $m ) use ( &$shields ) {
+				$key             = '<!--AIILSHIELD' . count( $shields ) . '-->';
+				$shields[ $key ] = $m[0];
+				return $key;
+			},
+			(string) $content
+		);
+
 		$link    = '<a href="' . esc_url( $url ) . '">' . esc_html( $anchor ) . '</a>';
 		$pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor, '/' ) . '(?![\p{L}\p{N}])(?![^<]*<\/a>)/iu';
 
 		$sentence = trim( (string) $sentence );
+		$result   = null;
 
 		if ( '' !== $sentence ) {
 			$needle = self::normalize_for_match( $sentence );
 
-			if ( preg_match_all( '/<(p|li|h[1-6])\b[^>]*>(.*?)<\/\1>/is', $content, $m, PREG_OFFSET_CAPTURE ) ) {
+			if ( preg_match_all( '/<(p|li|blockquote|dd|td)\b[^>]*>(.*?)<\/\1>/is', $protected, $m, PREG_OFFSET_CAPTURE ) ) {
 				foreach ( $m[0] as $idx => $match ) {
 					$block_html  = $match[0];
 					$byte_offset = $match[1];
 
 					$block_text = self::normalize_for_match( wp_strip_all_tags( $block_html ) );
-					if ( '' === $block_text ) {
-						continue;
-					}
-					if ( false === mb_stripos( $block_text, $needle ) ) {
+					if ( '' === $block_text || false === mb_stripos( $block_text, $needle ) ) {
 						continue;
 					}
 
 					$replaced = preg_replace( $pattern, $link, $block_html, 1 );
 					if ( is_string( $replaced ) && $replaced !== $block_html ) {
-						return substr( $content, 0, $byte_offset ) . $replaced . substr( $content, $byte_offset + strlen( $block_html ) );
+						$result = substr( $protected, 0, $byte_offset ) . $replaced . substr( $protected, $byte_offset + strlen( $block_html ) );
+						break;
 					}
 				}
 			}
 		}
 
-		// Fallback: first valid match anywhere in the content.
-		$new = preg_replace( $pattern, $link, $content, 1 );
-		return is_string( $new ) ? $new : $content;
+		if ( null === $result ) {
+			// Fallback: first valid match anywhere in the heading-shielded content.
+			$new    = preg_replace( $pattern, $link, $protected, 1 );
+			$result = is_string( $new ) ? $new : $protected;
+		}
+
+		// Restore the shielded headings/regions verbatim.
+		return strtr( $result, $shields );
 	}
 
 	/**
