@@ -5,6 +5,106 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AIIL_Inserter {
 
+	/** Short connector words allowed INSIDE an anchor phrase (e.g. "car rental in Singapore"). */
+	protected static $bridge = array(
+		'in'=>1,'of'=>1,'for'=>1,'and'=>1,'the'=>1,'a'=>1,'an'=>1,'to'=>1,'on'=>1,'with'=>1,'at'=>1,'by'=>1,'or'=>1,
+	);
+
+	/** Common / filler words that must NOT count as a target "topic" word when refining anchors. */
+	protected static $keystop = array(
+		'you'=>1,'your'=>1,'our'=>1,'are'=>1,'is'=>1,'was'=>1,'were'=>1,'be'=>1,'been'=>1,'has'=>1,'have'=>1,'had'=>1,
+		'how'=>1,'why'=>1,'what'=>1,'when'=>1,'where'=>1,'who'=>1,'this'=>1,'that'=>1,'these'=>1,'those'=>1,'it'=>1,'its'=>1,
+		'as'=>1,'about'=>1,'more'=>1,'most'=>1,'best'=>1,'top'=>1,'will'=>1,'can'=>1,'could'=>1,'would'=>1,'should'=>1,'may'=>1,
+		'new'=>1,'guide'=>1,'tips'=>1,'into'=>1,'from'=>1,'after'=>1,'before'=>1,'here'=>1,'now'=>1,'truth'=>1,'forever'=>1,
+	);
+
+	/** Crude stemmer so "coating"/"coatings" and "detail"/"detailing" match. */
+	protected static function stem( $w ) {
+		$w = mb_strtolower( (string) $w );
+		foreach ( array( 'ings', 'ing', 'ies', 'es', 's' ) as $suf ) {
+			if ( mb_strlen( $w ) > strlen( $suf ) + 2 && substr( $w, -strlen( $suf ) ) === $suf ) {
+				return substr( $w, 0, -strlen( $suf ) );
+			}
+		}
+		return $w;
+	}
+
+	/**
+	 * Improve an anchor deterministically (no AI call): replace/expand it with the longest
+	 * phrase that (a) actually exists in the source passage and (b) overlaps the TARGET title.
+	 *
+	 * The AI often grabs a single word ("Ceramic") when the passage contains the fuller phrase
+	 * ("Ceramic coatings"), or an off-topic word ("quietly") when the on-topic phrase ("car
+	 * rental in Singapore") is right there. This picks the richest target-overlapping phrase.
+	 *
+	 * @return string
+	 */
+	public static function refine_anchor( $anchor, $passage, $target_title ) {
+		$anchor  = trim( (string) $anchor );
+		$passage = (string) $passage;
+		if ( '' === $anchor || '' === $passage ) {
+			return $anchor;
+		}
+
+		// Key stems from the target title (content words only).
+		$ttok = array();
+		foreach ( preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( wp_strip_all_tags( (string) $target_title ) ), -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+			if ( mb_strlen( $w ) >= 3 && ! isset( self::$bridge[ $w ] ) && ! isset( self::$keystop[ $w ] ) ) {
+				$ttok[ self::stem( $w ) ] = true;
+			}
+		}
+		if ( empty( $ttok ) ) {
+			return $anchor;
+		}
+
+		if ( ! preg_match_all( '/[\p{L}\p{N}]+/u', $passage, $tm, PREG_OFFSET_CAPTURE ) ) {
+			return $anchor;
+		}
+		$toks = array();
+		foreach ( $tm[0] as $t ) {
+			$lc   = mb_strtolower( $t[0] );
+			$type = isset( $ttok[ self::stem( $lc ) ] ) ? 'key' : ( isset( self::$bridge[ $lc ] ) ? 'bridge' : 'other' );
+			$toks[] = array( 'start' => $t[1], 'end' => $t[1] + strlen( $t[0] ), 'type' => $type );
+		}
+
+		// Longest run bounded by key tokens (interior key/bridge), up to 6 words, richest in keys.
+		$best = null;
+		$n    = count( $toks );
+		for ( $i = 0; $i < $n; $i++ ) {
+			if ( 'key' !== $toks[ $i ]['type'] ) {
+				continue;
+			}
+			$keys = 0;
+			$last = $i;
+			for ( $j = $i; $j < $n && ( $j - $i ) < 6; $j++ ) {
+				if ( 'key' === $toks[ $j ]['type'] ) {
+					$keys++;
+					$last = $j;
+				} elseif ( 'bridge' !== $toks[ $j ]['type'] ) {
+					break;
+				}
+			}
+			$words = $last - $i + 1;
+			if ( null === $best || $keys > $best['keys'] || ( $keys === $best['keys'] && $words > $best['words'] ) ) {
+				$best = array( 'start' => $toks[ $i ]['start'], 'end' => $toks[ $last ]['end'], 'keys' => $keys, 'words' => $words );
+			}
+		}
+		if ( null === $best ) {
+			return $anchor;
+		}
+
+		$phrase        = trim( substr( $passage, $best['start'], $best['end'] - $best['start'] ) );
+		$anchor_words  = count( preg_split( '/\s+/u', $anchor, -1, PREG_SPLIT_NO_EMPTY ) );
+		$anchor_is_key = isset( $ttok[ self::stem( preg_replace( '/[^\p{L}\p{N}]+/u', '', mb_strtolower( $anchor ) ) ) ] );
+
+		// Prefer the richer phrase: it has more words than the current anchor, or the current
+		// anchor is not even a target term (e.g. "quietly").
+		if ( '' !== $phrase && ( $best['words'] > $anchor_words || ! $anchor_is_key ) ) {
+			return $phrase;
+		}
+		return $anchor;
+	}
+
 	/**
 	 * When true, the save_post hook should ignore the next update — it was
 	 * triggered by us inserting a link, not by a real edit. See AIIL_Hooks::on_save_post.
@@ -54,6 +154,12 @@ class AIIL_Inserter {
 		$stashed  = AIIL_Placement::get_stash( (int) $opportunity_id );
 		$sentence = $stashed && ! empty( $stashed['sentence'] ) ? $stashed['sentence'] : '';
 		$anchor   = $override_anchor !== null ? (string) $override_anchor : (string) $opportunity->anchor_text;
+
+		// Upgrade a lazy single-word anchor to the richest target-overlapping phrase present in
+		// the passage (helps links verified before this improvement, without re-running the AI).
+		if ( null === $override_anchor && '' !== $sentence ) {
+			$anchor = self::refine_anchor( $anchor, $sentence, $target->post_title );
+		}
 
 		if ( '' === trim( $anchor ) ) {
 			throw new Exception( 'No anchor text on opportunity ' . $opportunity_id );

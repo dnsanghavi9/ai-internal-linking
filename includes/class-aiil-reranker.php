@@ -123,6 +123,11 @@ class AIIL_Reranker {
 		// Ground the AI-chosen anchor: it must appear VERBATIM (word-bounded) in the passage.
 		// This both prevents hallucinated anchors and guarantees the inserter can place it.
 		$grounded = self::ground_anchor( (string) $v['anchor'], $passage );
+		// Then deterministically upgrade a lazy single-word / off-topic pick to the richest
+		// target-overlapping phrase that exists in the passage (no extra AI call).
+		if ( '' !== $grounded ) {
+			$grounded = AIIL_Inserter::refine_anchor( $grounded, $passage, $target->post_title );
+		}
 
 		$signals['rerank'] = array(
 			'topic'        => (bool) $v['topic_match'],
