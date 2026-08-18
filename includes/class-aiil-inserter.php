@@ -172,17 +172,21 @@ class AIIL_Inserter {
 		$anchor_html = (int) AIIL_Settings::get( 'bold_links', 1 ) === 1
 			? '<strong>' . esc_html( $anchor ) . '</strong>'
 			: esc_html( $anchor );
-		$link        = '<a href="' . esc_url( $url ) . '">' . $anchor_html . '</a>';
-		$pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor, '/' ) . '(?![\p{L}\p{N}])(?![^<]*<\/a>)/iu';
+		$link    = '<a href="' . esc_url( $url ) . '">' . $anchor_html . '</a>';
+		// Bare word-boundary matcher (inside-<a> is handled by span checks in best_offset()).
+		$pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor, '/' ) . '(?![\p{L}\p{N}])/iu';
+		$min_gap = (int) AIIL_Settings::get( 'link_word_gap', 3 );
 
 		$sentence = trim( (string) $sentence );
 		$result   = null;
 
+		// Preferred: the block that contains the AI-chosen sentence, and only if we can honour
+		// the word-gap there. Otherwise fall through to a best-effort placement.
 		if ( '' !== $sentence ) {
 			$needle = self::normalize_for_match( $sentence );
 
 			if ( preg_match_all( '/<(p|li|blockquote|dd|td)\b[^>]*>(.*?)<\/\1>/is', $protected, $m, PREG_OFFSET_CAPTURE ) ) {
-				foreach ( $m[0] as $idx => $match ) {
+				foreach ( $m[0] as $match ) {
 					$block_html  = $match[0];
 					$byte_offset = $match[1];
 
@@ -191,9 +195,10 @@ class AIIL_Inserter {
 						continue;
 					}
 
-					$replaced = preg_replace( $pattern, $link, $block_html, 1 );
-					if ( is_string( $replaced ) && $replaced !== $block_html ) {
-						$result = substr( $protected, 0, $byte_offset ) . $replaced . substr( $protected, $byte_offset + strlen( $block_html ) );
+					$spot = self::best_offset( $block_html, $pattern, $min_gap );
+					if ( $spot && $spot['gap'] >= $min_gap ) {
+						$new_block = substr( $block_html, 0, $spot['offset'] ) . $link . substr( $block_html, $spot['offset'] + $spot['length'] );
+						$result    = substr( $protected, 0, $byte_offset ) . $new_block . substr( $protected, $byte_offset + strlen( $block_html ) );
 						break;
 					}
 				}
@@ -201,13 +206,76 @@ class AIIL_Inserter {
 		}
 
 		if ( null === $result ) {
-			// Fallback: first valid match anywhere in the heading-shielded content.
-			$new    = preg_replace( $pattern, $link, $protected, 1 );
-			$result = is_string( $new ) ? $new : $protected;
+			// Best-effort fallback: the spot in the whole (heading-shielded) content that sits
+			// furthest from any existing link, so a new link never crowds an old one — even when
+			// no spot fully meets the gap, we pick the roomiest available.
+			$spot = self::best_offset( $protected, $pattern, $min_gap );
+			if ( $spot ) {
+				$result = substr( $protected, 0, $spot['offset'] ) . $link . substr( $protected, $spot['offset'] + $spot['length'] );
+			}
 		}
 
 		// Restore the shielded headings/regions verbatim.
-		return strtr( $result, $shields );
+		return strtr( null === $result ? $protected : $result, $shields );
+	}
+
+	/**
+	 * Choose where to place the anchor: the occurrence that maximises the word distance to the
+	 * nearest existing <a> link. Occurrences inside an existing link are skipped entirely.
+	 *
+	 * @return array{offset:int,length:int,gap:int}|null  Byte offset + length of the chosen
+	 *         occurrence and the word gap to the nearest existing link (PHP_INT_MAX when there
+	 *         are no existing links). Null when the anchor does not occur in $html.
+	 */
+	protected static function best_offset( $html, $pattern, $min_gap ) {
+		if ( ! preg_match_all( $pattern, $html, $mm, PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+
+		$links = array();
+		if ( preg_match_all( '/<a\b[^>]*>.*?<\/a>/is', $html, $lm, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $lm[0] as $l ) {
+				$links[] = array( $l[1], $l[1] + strlen( $l[0] ) );
+			}
+		}
+
+		$best = null;
+		foreach ( $mm[0] as $m ) {
+			$cs  = $m[1];
+			$ce  = $cs + strlen( $m[0] );
+			$gap = PHP_INT_MAX;
+			$bad = false;
+
+			foreach ( $links as $L ) {
+				if ( $cs >= $L[0] && $ce <= $L[1] ) {
+					$bad = true; // occurrence sits inside an existing link
+					break;
+				}
+				if ( $L[1] <= $cs ) {
+					$between = substr( $html, $L[1], $cs - $L[1] );
+				} elseif ( $L[0] >= $ce ) {
+					$between = substr( $html, $ce, $L[0] - $ce );
+				} else {
+					$between = '';
+				}
+				$words = count( preg_split( '/\s+/u', trim( wp_strip_all_tags( $between ) ), -1, PREG_SPLIT_NO_EMPTY ) );
+				$gap   = min( $gap, $words );
+			}
+			if ( $bad ) {
+				continue;
+			}
+
+			if ( null === $best || $gap > $best['gap'] ) {
+				$best = array( 'offset' => $cs, 'length' => strlen( $m[0] ), 'gap' => $gap );
+				// Once we clear the gap next to a real link, stop — the earliest qualifying spot
+				// reads most naturally.
+				if ( $gap >= $min_gap && ! empty( $links ) ) {
+					break;
+				}
+			}
+		}
+
+		return $best;
 	}
 
 	/**

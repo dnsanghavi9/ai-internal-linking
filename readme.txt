@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.5.5 =
+* Links are no longer placed next to an existing link. The inserter now keeps a minimum word gap (default 3) from any link already in the post and chooses the roomiest spot for the anchor. Configurable under Settings → Insertion → Min Words From Existing Links (0 disables).
+
 = 2.5.4 =
 * Inserted internal links can now be bold (anchor wrapped in <strong>). On by default; toggle under Settings → Insertion → Bold Anchor Text. Existing links are unaffected.
 

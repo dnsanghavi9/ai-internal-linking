@@ -125,6 +125,13 @@ $settings = AIIL_Settings::all();
 				</td>
 			</tr>
 			<tr>
+				<th><label for="aiil_link_word_gap"><?php esc_html_e( 'Min Words From Existing Links', 'ai-internal-linking' ); ?></label></th>
+				<td>
+					<input type="number" id="aiil_link_word_gap" name="aiil[link_word_gap]" value="<?php echo esc_attr( $settings['link_word_gap'] ); ?>" min="0" max="20" step="1" />
+					<p class="description"><?php esc_html_e( 'Keep at least this many words between a new internal link and any link already in the post, so links are never placed side by side. The plugin picks the roomiest spot for the anchor. Default: 3. Set to 0 to disable.', 'ai-internal-linking' ); ?></p>
+				</td>
+			</tr>
+			<tr>
 				<th><?php esc_html_e( 'Avoid Reciprocal Links', 'ai-internal-linking' ); ?></th>
 				<td>
 					<label>
