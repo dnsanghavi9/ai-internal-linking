@@ -169,7 +169,10 @@ class AIIL_Inserter {
 			(string) $content
 		);
 
-		$link    = '<a href="' . esc_url( $url ) . '">' . esc_html( $anchor ) . '</a>';
+		$anchor_html = (int) AIIL_Settings::get( 'bold_links', 1 ) === 1
+			? '<strong>' . esc_html( $anchor ) . '</strong>'
+			: esc_html( $anchor );
+		$link        = '<a href="' . esc_url( $url ) . '">' . $anchor_html . '</a>';
 		$pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor, '/' ) . '(?![\p{L}\p{N}])(?![^<]*<\/a>)/iu';
 
 		$sentence = trim( (string) $sentence );

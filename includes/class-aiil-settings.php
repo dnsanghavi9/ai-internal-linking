@@ -24,6 +24,7 @@ class AIIL_Settings {
 			'rerank_pair_min'     => 75,   // 0-100; pair usefulness below this -> reject
 			'rerank_anchor_min'   => 70,   // 0-100; safety floor only — the AI picks the anchor, so
 			                               // this should stay low. Below it -> needs a human.
+			'bold_links'          => 1,    // wrap inserted anchor text in <strong>
 			'auto_link_new'       => 1,    // when a post is published/edited, auto-prepare (+verify) its links in the background
 			'auto_insert'         => 1,    // insert kept links automatically, no manual review
 			'auto_min_confidence' => 75,   // aligns with rerank_pair_min so AI-verified links actually auto-insert
@@ -75,6 +76,7 @@ class AIIL_Settings {
 		$out['rerank_budget']       = min( 20, max( 1, (int) ( $input['rerank_budget'] ?? 8 ) ) );
 		$out['rerank_pair_min']     = min( 100, max( 0, (int) ( $input['rerank_pair_min'] ?? 75 ) ) );
 		$out['rerank_anchor_min']   = min( 100, max( 0, (int) ( $input['rerank_anchor_min'] ?? 70 ) ) );
+		$out['bold_links']          = empty( $input['bold_links'] ) ? 0 : 1;
 		$out['auto_link_new']       = empty( $input['auto_link_new'] ) ? 0 : 1;
 		$out['auto_insert']         = empty( $input['auto_insert'] ) ? 0 : 1;
 		$out['auto_min_confidence'] = min( 100, max( 0, (int) ( $input['auto_min_confidence'] ?? 75 ) ) );

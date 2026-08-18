@@ -115,6 +115,16 @@ $settings = AIIL_Settings::all();
 		<h2><?php esc_html_e( 'Insertion', 'ai-internal-linking' ); ?></h2>
 		<table class="form-table">
 			<tr>
+				<th><?php esc_html_e( 'Bold Anchor Text', 'ai-internal-linking' ); ?></th>
+				<td>
+					<label>
+						<input type="checkbox" name="aiil[bold_links]" value="1" <?php checked( $settings['bold_links'], 1 ); ?> />
+						<?php esc_html_e( 'Make inserted internal links bold (wrap the anchor in <strong>)', 'ai-internal-linking' ); ?>
+					</label>
+					<p class="description"><?php esc_html_e( 'Applies to links inserted from now on. Links already in your posts are unaffected.', 'ai-internal-linking' ); ?></p>
+				</td>
+			</tr>
+			<tr>
 				<th><?php esc_html_e( 'Avoid Reciprocal Links', 'ai-internal-linking' ); ?></th>
 				<td>
 					<label>

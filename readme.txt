@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.5.4 =
+* Inserted internal links can now be bold (anchor wrapped in <strong>). On by default; toggle under Settings → Insertion → Bold Anchor Text. Existing links are unaffected.
+
 = 2.5.3 =
 * Links are never inserted into headings. Headings (and figure captions) are now excluded both when choosing where to link from and when writing the link — an internal link only ever lands in body copy, never an H1–H6, caption, or nav. Re-index posts to also stop headings being chosen as a link source.
 
