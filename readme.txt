@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.6.1 =
+* Anchor refiner now also uses the target article's body vocabulary, not just its title — so a lone verb like "Document" becomes a real source phrase such as "Document the scene" when the target is about documenting a crash scene. Still grounded in the source passage; no extra API call.
+
 = 2.6.0 =
 * Better anchors: after the AI picks an anchor, a deterministic refiner (no extra API call) upgrades a lazy single word to the longest phrase that exists in the source passage and overlaps the target title — e.g. "Ceramic" → "Ceramic coatings", "detailing" → "Regular car detailing" — and replaces an off-topic word ("quietly") with the on-topic phrase ("car rental in Singapore") when it is present. Applies at verification and at insertion, so links verified earlier also benefit.
 

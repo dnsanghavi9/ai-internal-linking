@@ -126,7 +126,7 @@ class AIIL_Reranker {
 		// Then deterministically upgrade a lazy single-word / off-topic pick to the richest
 		// target-overlapping phrase that exists in the passage (no extra AI call).
 		if ( '' !== $grounded ) {
-			$grounded = AIIL_Inserter::refine_anchor( $grounded, $passage, $target->post_title );
+			$grounded = AIIL_Inserter::refine_anchor( $grounded, $passage, $target->post_title, $target->post_content );
 		}
 
 		$signals['rerank'] = array(

@@ -39,18 +39,35 @@ class AIIL_Inserter {
 	 *
 	 * @return string
 	 */
-	public static function refine_anchor( $anchor, $passage, $target_title ) {
+	public static function refine_anchor( $anchor, $passage, $target_title, $target_content = '' ) {
 		$anchor  = trim( (string) $anchor );
 		$passage = (string) $passage;
 		if ( '' === $anchor || '' === $passage ) {
 			return $anchor;
 		}
 
-		// Key stems from the target title (content words only).
+		// "Topic" stems that mark the target: every content word in its TITLE, plus the words its
+		// BODY repeats (freq >= 2). The body vocabulary lets us expand a lone verb like "Document"
+		// into "Document the scene" — a real phrase in the source that describes the target — even
+		// when the exact title phrase isn't present in the source passage.
 		$ttok = array();
 		foreach ( preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( wp_strip_all_tags( (string) $target_title ) ), -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
 			if ( mb_strlen( $w ) >= 3 && ! isset( self::$bridge[ $w ] ) && ! isset( self::$keystop[ $w ] ) ) {
 				$ttok[ self::stem( $w ) ] = true;
+			}
+		}
+		if ( '' !== $target_content ) {
+			$freq = array();
+			foreach ( preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( wp_strip_all_tags( (string) $target_content ) ), -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+				if ( mb_strlen( $w ) >= 3 && ! isset( self::$bridge[ $w ] ) && ! isset( self::$keystop[ $w ] ) ) {
+					$s          = self::stem( $w );
+					$freq[ $s ] = ( $freq[ $s ] ?? 0 ) + 1;
+				}
+			}
+			foreach ( $freq as $s => $c ) {
+				if ( $c >= 2 ) {
+					$ttok[ $s ] = true;
+				}
 			}
 		}
 		if ( empty( $ttok ) ) {
@@ -158,7 +175,7 @@ class AIIL_Inserter {
 		// Upgrade a lazy single-word anchor to the richest target-overlapping phrase present in
 		// the passage (helps links verified before this improvement, without re-running the AI).
 		if ( null === $override_anchor && '' !== $sentence ) {
-			$anchor = self::refine_anchor( $anchor, $sentence, $target->post_title );
+			$anchor = self::refine_anchor( $anchor, $sentence, $target->post_title, $target->post_content );
 		}
 
 		if ( '' === trim( $anchor ) ) {
