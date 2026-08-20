@@ -31,6 +31,7 @@ class AIIL_Admin {
 		add_action( 'admin_post_aiil_run_queue', array( $this, 'handle_run_queue' ) );
 		add_action( 'admin_post_aiil_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_aiil_reset_data', array( $this, 'handle_reset_data' ) );
+		add_action( 'admin_post_aiil_remove_links', array( $this, 'handle_remove_links' ) );
 		add_action( 'admin_post_aiil_reevaluate', array( $this, 'handle_reevaluate' ) );
 		add_action( 'admin_post_aiil_rebuild_matches', array( $this, 'handle_rebuild_matches' ) );
 		add_action( 'admin_post_aiil_reapply_thresholds', array( $this, 'handle_reapply_thresholds' ) );
@@ -334,10 +335,27 @@ class AIIL_Admin {
 		$this->check_cap();
 		check_admin_referer( 'aiil_reset_data' );
 
+		$args = array( 'reset' => 1 );
+
+		// Optionally strip the plugin's links out of post content first — this must run BEFORE
+		// reset_data() truncates the links table (removal needs those records).
+		if ( ! empty( $_POST['remove_links'] ) ) {
+			$res             = AIIL_Inserter::remove_all_inserted_links();
+			$args['unlinked'] = (int) $res['removed'];
+		}
+
 		AIIL_DB::reset_data();
 		AIIL_Logger::info( 'Plugin data reset (testing tool)' );
 
-		$this->redirect( 'settings', array( 'reset' => 1 ) );
+		$this->redirect( 'settings', $args );
+	}
+
+	public function handle_remove_links() {
+		$this->check_cap();
+		check_admin_referer( 'aiil_remove_links' );
+
+		$res = AIIL_Inserter::remove_all_inserted_links();
+		$this->redirect( 'settings', array( 'unlinked' => (int) $res['removed'], 'unlinked_posts' => (int) $res['posts'] ) );
 	}
 
 	public function handle_export() {

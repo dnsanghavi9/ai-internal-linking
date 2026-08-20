@@ -15,6 +15,11 @@ $settings = AIIL_Settings::all();
 	<?php if ( isset( $_GET['reset'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'All plugin data was cleared. Settings were kept.', 'ai-internal-linking' ); ?></p></div>
 	<?php endif; ?>
+	<?php if ( isset( $_GET['unlinked'] ) ) : ?>
+		<div class="notice notice-success is-dismissible"><p>
+			<?php printf( esc_html__( 'Removed %d inserted internal link(s) from your posts (anchor text kept, links unwrapped).', 'ai-internal-linking' ), (int) $_GET['unlinked'] ); ?>
+		</p></div>
+	<?php endif; ?>
 
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 		<input type="hidden" name="action" value="aiil_save_settings" />
@@ -197,13 +202,34 @@ $settings = AIIL_Settings::all();
 
 	<div class="aiil-danger-zone">
 		<h2><?php esc_html_e( 'Testing Tools — Danger Zone', 'ai-internal-linking' ); ?></h2>
+
+		<h3><?php esc_html_e( 'Remove inserted links from posts', 'ai-internal-linking' ); ?></h3>
 		<p class="description">
-			<?php esc_html_e( 'Empties all plugin data (indexed posts, passages, opportunities, inserted-link records, queue, and logs) so you can test from a clean slate. Your settings and API key are kept. This does NOT remove links already inserted into post content.', 'ai-internal-linking' ); ?>
+			<?php esc_html_e( 'Unwraps every internal link this plugin inserted, leaving the anchor text in place. Editorial links you added yourself are not touched. This edits post content and cannot be undone. Plugin data (index, opportunities) is kept, so you can re-insert afterwards.', 'ai-internal-linking' ); ?>
+		</p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="aiil-danger-form"
+			data-confirm="<?php esc_attr_e( 'Remove ALL links this plugin inserted from your post content? Anchor text is kept; this edits posts and cannot be undone.', 'ai-internal-linking' ); ?>">
+			<input type="hidden" name="action" value="aiil_remove_links" />
+			<?php wp_nonce_field( 'aiil_remove_links' ); ?>
+			<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Remove Inserted Links', 'ai-internal-linking' ); ?></button>
+		</form>
+
+		<hr style="margin:20px 0" />
+
+		<h3><?php esc_html_e( 'Clear all plugin data', 'ai-internal-linking' ); ?></h3>
+		<p class="description">
+			<?php esc_html_e( 'Empties all plugin data (indexed posts, passages, opportunities, inserted-link records, queue, and logs) so you can test from a clean slate. Your settings and API key are kept.', 'ai-internal-linking' ); ?>
 		</p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="aiil-danger-form"
 			data-confirm="<?php esc_attr_e( 'This permanently clears ALL plugin data (posts analysis, opportunities, links, queue, logs). Continue?', 'ai-internal-linking' ); ?>">
 			<input type="hidden" name="action" value="aiil_reset_data" />
 			<?php wp_nonce_field( 'aiil_reset_data' ); ?>
+			<p>
+				<label>
+					<input type="checkbox" name="remove_links" value="1" />
+					<?php esc_html_e( 'Also remove the plugin’s inserted links from post content (recommended for a full clean slate)', 'ai-internal-linking' ); ?>
+				</label>
+			</p>
 			<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Clear All Plugin Data', 'ai-internal-linking' ); ?></button>
 		</form>
 	</div>

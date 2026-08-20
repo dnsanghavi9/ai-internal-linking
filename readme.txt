@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.6.2 =
+* New danger-zone tool: "Remove Inserted Links" unwraps every internal link the plugin added to your posts (anchor text kept, editorial links untouched), and "Clear All Plugin Data" gains an optional "also remove inserted links" checkbox. Inserted links now carry an invisible data-aiil marker so removal is surgical; links added before this are matched by URL + anchor.
+
 = 2.6.1 =
 * Anchor refiner now also uses the target article's body vocabulary, not just its title — so a lone verb like "Document" becomes a real source phrase such as "Document the scene" when the target is about documenting a crash scene. Still grounded in the source passage; no extra API call.
 

@@ -295,7 +295,9 @@ class AIIL_Inserter {
 		$anchor_html = (int) AIIL_Settings::get( 'bold_links', 1 ) === 1
 			? '<strong>' . esc_html( $anchor ) . '</strong>'
 			: esc_html( $anchor );
-		$link    = '<a href="' . esc_url( $url ) . '">' . $anchor_html . '</a>';
+		// data-aiil marks this as a plugin-inserted link so "Remove inserted links" can find and
+		// unwrap exactly our own links later, without touching editorial links.
+		$link    = '<a href="' . esc_url( $url ) . '" data-aiil="1">' . $anchor_html . '</a>';
 		// Bare word-boundary matcher (inside-<a> is handled by span checks in best_offset()).
 		$pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor, '/' ) . '(?![\p{L}\p{N}])/iu';
 		$min_gap = (int) AIIL_Settings::get( 'link_word_gap', 3 );
@@ -399,6 +401,126 @@ class AIIL_Inserter {
 		}
 
 		return $best;
+	}
+
+	/**
+	 * Remove every internal link this plugin inserted from post content, restoring the plain
+	 * anchor text. Editorial links are left untouched. Marks the link rows removed and fixes
+	 * the counters; opportunities that were 'inserted' revert to 'verified' so state stays sane.
+	 *
+	 * @return array{removed:int,posts:int,missing:int}
+	 */
+	public static function remove_all_inserted_links() {
+		global $wpdb;
+
+		$links = $wpdb->get_results(
+			$wpdb->prepare( "SELECT id, source_post_id, target_post_id, anchor_text FROM " . AIIL_DB::links_table() . " WHERE status = %s", 'active' )
+		);
+
+		// Group by source post so each post is edited once.
+		$by_source = array();
+		foreach ( $links as $l ) {
+			$by_source[ (int) $l->source_post_id ][] = $l;
+		}
+
+		$removed = 0;
+		$posts   = 0;
+		$missing = 0;
+
+		foreach ( $by_source as $source_id => $rows ) {
+			$post = get_post( (int) $source_id );
+			if ( ! $post ) {
+				$missing += count( $rows );
+				continue;
+			}
+			$content = $post->post_content;
+			$changed = false;
+
+			foreach ( $rows as $row ) {
+				$new = self::unwrap_link( $content, (int) $row->target_post_id, (string) $row->anchor_text );
+				if ( null !== $new ) {
+					$content = $new;
+					$changed = true;
+					$removed++;
+					$wpdb->update( AIIL_DB::links_table(), array( 'status' => 'removed' ), array( 'id' => (int) $row->id ) );
+					self::bump_link_counts( (int) $source_id, (int) $row->target_post_id, -1 );
+					$wpdb->update(
+						AIIL_DB::opportunities_table(),
+						array( 'status' => 'verified' ),
+						array( 'source_post_id' => (int) $source_id, 'target_post_id' => (int) $row->target_post_id, 'status' => 'inserted' )
+					);
+				} else {
+					$missing++;
+				}
+			}
+
+			if ( $changed ) {
+				self::$skip_post_ids[] = (int) $source_id;
+				wp_update_post( array( 'ID' => (int) $source_id, 'post_content' => $content ) );
+				self::$skip_post_ids = array_diff( self::$skip_post_ids, array( (int) $source_id ) );
+				$posts++;
+			}
+		}
+
+		AIIL_Logger::info( 'Removed inserted internal links', array( 'removed' => $removed, 'posts' => $posts, 'not_found' => $missing ) );
+		return array( 'removed' => $removed, 'posts' => $posts, 'missing' => $missing );
+	}
+
+	/**
+	 * Unwrap ONE plugin link to $target_id in $content, returning the modified content (or null
+	 * if not found). Prefers a data-aiil="1" marked link; falls back to matching an <a> whose
+	 * href resolves to the target and whose text equals the recorded anchor (for links inserted
+	 * before the marker existed). The wrapping <strong> we may have added is removed too.
+	 */
+	protected static function unwrap_link( $content, $target_id, $anchor ) {
+		$permalink = get_permalink( (int) $target_id );
+		$path      = $permalink ? trim( (string) wp_parse_url( $permalink, PHP_URL_PATH ), '/' ) : '';
+		$anchor_lc = self::normalize_for_match( wp_strip_all_tags( (string) $anchor ) );
+
+		if ( ! preg_match_all( '/<a\b[^>]*>.*?<\/a>/is', (string) $content, $m, PREG_OFFSET_CAPTURE ) ) {
+			return null;
+		}
+
+		$fallback = null; // href+anchor match, used if no marked link is found
+		foreach ( $m[0] as $match ) {
+			$tag    = $match[0];
+			$offset = $match[1];
+
+			// Does this <a> point at the target?
+			$href = '';
+			if ( preg_match( '/href\s*=\s*("|\')(.*?)\1/i', $tag, $hm ) ) {
+				$href = html_entity_decode( $hm[2], ENT_QUOTES, 'UTF-8' );
+			}
+			$points_to_target = ( '' !== $path && false !== strpos( $href, $path ) )
+				|| (bool) preg_match( '/[?&](?:p|page_id)=' . (int) $target_id . '\b/', $href );
+			if ( ! $points_to_target ) {
+				continue;
+			}
+
+			$inner = preg_replace( '/^<a\b[^>]*>|<\/a>$/i', '', $tag );
+			$plain = self::normalize_for_match( wp_strip_all_tags( $inner ) );
+
+			if ( false !== strpos( $tag, 'data-aiil' ) ) {
+				return substr( $content, 0, $offset ) . self::unwrap_inner( $inner ) . substr( $content, $offset + strlen( $tag ) );
+			}
+			if ( null === $fallback && '' !== $anchor_lc && $plain === $anchor_lc ) {
+				$fallback = array( $offset, strlen( $tag ), self::unwrap_inner( $inner ) );
+			}
+		}
+
+		if ( $fallback ) {
+			return substr( $content, 0, $fallback[0] ) . $fallback[2] . substr( $content, $fallback[0] + $fallback[1] );
+		}
+		return null;
+	}
+
+	/** Inner HTML of an unwrapped link, with a wrapping <strong> (added by bold_links) stripped. */
+	protected static function unwrap_inner( $inner ) {
+		$inner = trim( (string) $inner );
+		if ( preg_match( '/^<strong>(.*)<\/strong>$/is', $inner, $sm ) ) {
+			return $sm[1];
+		}
+		return $inner;
 	}
 
 	/**
