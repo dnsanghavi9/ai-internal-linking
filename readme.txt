@@ -39,6 +39,9 @@ Features:
 
 == Changelog ==
 
+= 2.6.3 =
+* Anchor refiner now also runs during placement, so the deterministic (AI-verification-off) path produces good multi-word anchors on Ready/Over-cap candidates too — previously only inserted and AI-verified links were refined. Richer anchors also raise confidence, so more clear-cut links auto-insert.
+
 = 2.6.2 =
 * New danger-zone tool: "Remove Inserted Links" unwraps every internal link the plugin added to your posts (anchor text kept, editorial links untouched), and "Clear All Plugin Data" gains an optional "also remove inserted links" checkbox. Inserted links now carry an invisible data-aiil marker so removal is surgical; links added before this are matched by URL + anchor.
 

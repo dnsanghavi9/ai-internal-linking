@@ -124,6 +124,14 @@ class AIIL_Placement {
 
 		$rerank_on = (int) AIIL_Settings::get( 'use_ai_rerank', 0 ) === 1;
 
+		// Upgrade the mechanical single-word pick to the richest target-overlapping phrase in the
+		// passage (e.g. "loan" -> "loan terms", "remove" -> "remove visible dirt"). This is what
+		// makes anchors good on the deterministic (AI-verification-off) path too, not just at
+		// insert time. No API call.
+		if ( '' !== $anchor ) {
+			$anchor = AIIL_Inserter::refine_anchor( $anchor, $sentence, $target->post_title, $target->post_content );
+		}
+
 		if ( '' === $anchor && ! $rerank_on ) {
 			// AI verification is OFF, so the mechanical anchor is final — and there is no
 			// distinctive one here (only generic words). Surface it rather than ship a weak link.
