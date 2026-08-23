@@ -39,6 +39,10 @@ Features:
 
 == Changelog ==
 
+= 2.7.0 =
+* Default generative model is now gemini-3.1-flash-lite (gemini-2.5-flash-lite is being retired for new accounts); configurable in Settings. Existing installs keep their saved model.
+* New Service Tier setting (default Flex) runs the background AI verification on the cheaper Flex tier. Self-healing: if the tier is unsupported the request automatically retries at standard tier and logs a notice, so verification never breaks. Field name is filterable (aiil_service_tier_field) for a fleet on a changing API. Applies to the generative model only, not embeddings.
+
 = 2.6.3 =
 * Anchor refiner now also runs during placement, so the deterministic (AI-verification-off) path produces good multi-word anchors on Ready/Over-cap candidates too — previously only inserted and AI-verified links were refined. Richer anchors also raise confidence, so more clear-cut links auto-insert.
 

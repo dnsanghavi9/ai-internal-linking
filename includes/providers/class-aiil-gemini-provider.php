@@ -16,7 +16,7 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 
 	public function __construct( $api_key = null, $model = null ) {
 		$this->api_key = $api_key ?: AIIL_Settings::get( 'api_key' );
-		$this->model   = $model ?: AIIL_Settings::get( 'model', 'gemini-2.5-flash-lite' );
+		$this->model   = $model ?: AIIL_Settings::get( 'model', 'gemini-3.1-flash-lite' );
 	}
 
 	protected function embed_model() {
@@ -171,22 +171,29 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			'generationConfig' => array( 'temperature' => 0.2, 'responseMimeType' => 'application/json' ),
 		);
 
-		$response = wp_remote_post(
-			$url,
-			array(
-				'timeout' => 45,
-				'headers' => array( 'Content-Type' => 'application/json' ),
-				'body'    => wp_json_encode( $body ),
-			)
-		);
+		// Escape hatch: let integrators adjust the whole request body without editing the plugin.
+		$body = (array) apply_filters( 'aiil_gemini_generate_body', $body, $this->model );
 
-		if ( is_wp_error( $response ) ) {
-			throw new Exception( 'Gemini request failed: ' . $response->get_error_message() );
+		// Optional cheaper "Flex" service tier for this background workload. The exact request
+		// field can vary by API version, so it is filterable AND self-healing: if the tiered
+		// request is rejected, we retry once WITHOUT the tier so verification never breaks — it
+		// just falls back to standard pricing (and logs a notice so the field can be corrected).
+		$tier      = (string) AIIL_Settings::get( 'service_tier', '' );
+		$tier_body = $body;
+		if ( '' !== $tier ) {
+			$field              = (string) apply_filters( 'aiil_service_tier_field', 'serviceTier' );
+			$tier_body[ $field ] = $tier;
 		}
-		$code = wp_remote_retrieve_response_code( $response );
-		$raw  = wp_remote_retrieve_body( $response );
+
+		list( $code, $raw ) = $this->post_json( $url, $tier_body );
+
+		if ( '' !== $tier && 400 === $code ) {
+			AIIL_Logger::warning( 'Flex service tier rejected; retrying at standard tier', array( 'model' => $this->model, 'detail' => mb_substr( (string) $raw, 0, 200 ) ) );
+			list( $code, $raw ) = $this->post_json( $url, $body );
+		}
+
 		if ( $code < 200 || $code >= 300 ) {
-			throw new Exception( 'Gemini HTTP ' . $code . ': ' . mb_substr( $raw, 0, 400 ) );
+			throw new Exception( 'Gemini HTTP ' . $code . ': ' . mb_substr( (string) $raw, 0, 400 ) );
 		}
 
 		$decoded = json_decode( $raw, true );
@@ -202,5 +209,26 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			throw new Exception( 'Gemini response was not valid JSON.' );
 		}
 		return $json;
+	}
+
+	/**
+	 * POST a JSON body and return [ http_code, raw_body ]. A transport error is surfaced as
+	 * code 0 so callers can treat it like an HTTP failure.
+	 *
+	 * @return array{0:int,1:string}
+	 */
+	protected function post_json( $url, array $body ) {
+		$response = wp_remote_post(
+			$url,
+			array(
+				'timeout' => 45,
+				'headers' => array( 'Content-Type' => 'application/json' ),
+				'body'    => wp_json_encode( $body ),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return array( 0, $response->get_error_message() );
+		}
+		return array( (int) wp_remote_retrieve_response_code( $response ), (string) wp_remote_retrieve_body( $response ) );
 	}
 }

@@ -39,7 +39,17 @@ $settings = AIIL_Settings::all();
 				<th><label for="aiil_model"><?php esc_html_e( 'Model', 'ai-internal-linking' ); ?></label></th>
 				<td>
 					<input type="text" id="aiil_model" name="aiil[model]" value="<?php echo esc_attr( $settings['model'] ); ?>" class="regular-text" />
-					<p class="description"><?php esc_html_e( 'Default: gemini-2.5-flash-lite', 'ai-internal-linking' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Generative model for AI verification / anchor fallback. Default: gemini-3.1-flash-lite. (gemini-2.5-flash-lite is being retired for new accounts.)', 'ai-internal-linking' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="aiil_service_tier"><?php esc_html_e( 'Service Tier', 'ai-internal-linking' ); ?></label></th>
+				<td>
+					<select id="aiil_service_tier" name="aiil[service_tier]">
+						<option value="flex" <?php selected( $settings['service_tier'], 'flex' ); ?>><?php esc_html_e( 'Flex — cheaper, variable latency (recommended)', 'ai-internal-linking' ); ?></option>
+						<option value="standard" <?php selected( $settings['service_tier'], '' ); ?>><?php esc_html_e( 'Standard — full price, fastest', 'ai-internal-linking' ); ?></option>
+					</select>
+					<p class="description"><?php esc_html_e( 'AI verification runs in the background, so the cheaper Flex tier is ideal. If your Gemini plan does not offer Flex, choose Standard. (Applies to the generative model only, not embeddings.)', 'ai-internal-linking' ); ?></p>
 				</td>
 			</tr>
 			<tr>

@@ -10,7 +10,8 @@ class AIIL_Settings {
 	public static function defaults() {
 		return array(
 			'provider'            => 'gemini',
-			'model'               => 'gemini-2.5-flash-lite', // used only for the AI anchor fallback
+			'model'               => 'gemini-3.1-flash-lite', // generative model for AI verify / anchor fallback
+			'service_tier'        => 'flex',                  // '' = standard, 'flex' = cheaper background tier
 			'api_key'             => '',
 			'max_outgoing_links'  => 2,
 			'match_top_k'         => 8,    // semantic neighbours retrieved per post
@@ -64,7 +65,9 @@ class AIIL_Settings {
 	public static function sanitize( $input ) {
 		$out                        = array();
 		$out['provider']            = sanitize_text_field( $input['provider'] ?? 'gemini' );
-		$out['model']               = sanitize_text_field( $input['model'] ?? 'gemini-2.5-flash-lite' );
+		$out['model']               = sanitize_text_field( $input['model'] ?? 'gemini-3.1-flash-lite' );
+		$tier                       = sanitize_key( $input['service_tier'] ?? 'flex' );
+		$out['service_tier']        = in_array( $tier, array( '', 'flex', 'standard' ), true ) ? ( 'standard' === $tier ? '' : $tier ) : '';
 		$out['api_key']             = trim( (string) ( $input['api_key'] ?? '' ) );
 		$out['max_outgoing_links']  = max( 1, (int) ( $input['max_outgoing_links'] ?? 2 ) );
 		$out['match_top_k']         = min( 50, max( 1, (int) ( $input['match_top_k'] ?? 8 ) ) );
