@@ -46,6 +46,12 @@ class AIIL_DB {
 		return $wpdb->prefix . 'aiil_logs';
 	}
 
+	/** One row per Gemini API call, for the Cost tab. */
+	public static function usage_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'aiil_usage';
+	}
+
 	public static function schema() {
 		global $wpdb;
 		$charset_collate = $wpdb->get_charset_collate();
@@ -57,6 +63,7 @@ class AIIL_DB {
 		$site_links    = self::site_links_table();
 		$queue         = self::queue_table();
 		$logs          = self::logs_table();
+		$usage         = self::usage_table();
 
 		$sql = array();
 
@@ -158,6 +165,22 @@ class AIIL_DB {
 			KEY created_at (created_at)
 		) {$charset_collate};";
 
+		$sql[] = "CREATE TABLE {$usage} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			blog_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 1,
+			call_type VARCHAR(20) NOT NULL,
+			model VARCHAR(100) NOT NULL DEFAULT '',
+			service_tier VARCHAR(20) NOT NULL DEFAULT '',
+			requests INT NOT NULL DEFAULT 1,
+			input_tokens BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			output_tokens BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			measured TINYINT(1) NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT NULL,
+			PRIMARY KEY  (id),
+			KEY blog_type (blog_id, call_type),
+			KEY created_at (created_at)
+		) {$charset_collate};";
+
 		return $sql;
 	}
 
@@ -166,7 +189,7 @@ class AIIL_DB {
 	 */
 	public static function reset_data() {
 		global $wpdb;
-		foreach ( array( self::posts_table(), self::passages_table(), self::opportunities_table(), self::links_table(), self::site_links_table(), self::queue_table(), self::logs_table() ) as $table ) {
+		foreach ( array( self::posts_table(), self::passages_table(), self::opportunities_table(), self::links_table(), self::site_links_table(), self::queue_table(), self::logs_table(), self::usage_table() ) as $table ) {
 			$wpdb->query( "TRUNCATE TABLE {$table}" );
 		}
 		$like    = $wpdb->esc_like( '_transient_aiil_placement_' ) . '%';

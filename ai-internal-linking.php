@@ -2,10 +2,10 @@
 /**
  * Plugin Name:       AI Internal Linking
  * Description:       Retrieval-based internal linking. Embeds every post at the passage level, matches posts by semantic similarity, and grounds each link anchor in a real source sentence. No topic lists, no per-niche configuration.
- * Version:           2.7.0
+ * Version:           2.8.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
- * Author:            AIIL
+ * Author:            Sanghavi Devarsh
  * License:           GPL-2.0-or-later
  * Text Domain:       ai-internal-linking
  * Update URI:        https://github.com/dnsanghavi9/ai-internal-linking
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AIIL_VERSION', '2.7.0' );
+define( 'AIIL_VERSION', '2.8.0' );
 define( 'AIIL_PLUGIN_FILE', __FILE__ );
 define( 'AIIL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AIIL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -39,6 +39,7 @@ require_once AIIL_PLUGIN_DIR . 'includes/class-aiil-status.php';
 require_once AIIL_PLUGIN_DIR . 'includes/class-aiil-logger.php';
 require_once AIIL_PLUGIN_DIR . 'includes/class-aiil-vector.php';
 require_once AIIL_PLUGIN_DIR . 'includes/class-aiil-queue.php';
+require_once AIIL_PLUGIN_DIR . 'includes/class-aiil-usage.php';
 require_once AIIL_PLUGIN_DIR . 'includes/providers/interface-aiil-provider.php';
 require_once AIIL_PLUGIN_DIR . 'includes/providers/class-aiil-gemini-provider.php';
 require_once AIIL_PLUGIN_DIR . 'includes/class-aiil-indexer.php';

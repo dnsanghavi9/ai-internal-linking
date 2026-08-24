@@ -81,6 +81,14 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			throw new Exception( 'Embedding response had no embeddings array.' );
 		}
 
+		// The embedding API does not return token usage, so this is an estimate (~4 chars/token)
+		// — recorded as such (measured = false) so the Cost tab never presents it as exact.
+		$estimated_tokens = 0;
+		foreach ( $texts as $t ) {
+			$estimated_tokens += AIIL_Usage::estimate_tokens( $t );
+		}
+		AIIL_Usage::record( 'embed', $model, '', $estimated_tokens, 0, false, count( $texts ) );
+
 		$out = array();
 		foreach ( $rows as $row ) {
 			$values = $row['values'] ?? null;
@@ -104,7 +112,7 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			. "- confidence: integer 0-100 for how natural and relevant the link is. If the target is a poor fit for this sentence, use a low value.\n"
 			. "anchor MUST appear verbatim inside the returned sentence. Return ONLY the JSON.";
 
-		$json = $this->generate_json( $prompt );
+		$json = $this->generate_json( $prompt, 'anchor' );
 
 		return array(
 			'anchor'     => isset( $json['anchor'] ) ? sanitize_text_field( $json['anchor'] ) : '',
@@ -147,7 +155,7 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			. "Return STRICT JSON with EXACTLY these keys: {\"topic_match\":bool,\"product_match\":bool,\"jurisdiction_match\":bool,\"pair_score\":int,\"anchor\":\"verbatim span or empty\",\"anchor_score\":int,\"reason\":\"short phrase\"}.\n"
 			. "Return ONLY the JSON.";
 
-		$json = $this->generate_json( $prompt );
+		$json = $this->generate_json( $prompt, 'verify' );
 
 		$clamp = function ( $v ) {
 			return max( 0, min( 100, (int) $v ) );
@@ -164,7 +172,7 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 		);
 	}
 
-	protected function generate_json( $prompt ) {
+	protected function generate_json( $prompt, $call_type = 'generate' ) {
 		$url  = add_query_arg( 'key', $this->api_key, sprintf( self::GEN_ENDPOINT, rawurlencode( $this->model ) ) );
 		$body = array(
 			'contents'         => array( array( 'role' => 'user', 'parts' => array( array( 'text' => $prompt ) ) ) ),
@@ -185,10 +193,12 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			$tier_body[ $field ] = $tier;
 		}
 
+		$used_tier = $tier;
 		list( $code, $raw ) = $this->post_json( $url, $tier_body );
 
 		if ( '' !== $tier && 400 === $code ) {
 			AIIL_Logger::warning( 'Flex service tier rejected; retrying at standard tier', array( 'model' => $this->model, 'detail' => mb_substr( (string) $raw, 0, 200 ) ) );
+			$used_tier = '';
 			list( $code, $raw ) = $this->post_json( $url, $body );
 		}
 
@@ -197,7 +207,20 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 		}
 
 		$decoded = json_decode( $raw, true );
-		$text    = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+		// usageMetadata is returned on every successful generateContent call — exact token
+		// counts, not an estimate, so this row is recorded `measured = true`.
+		$usage = $decoded['usageMetadata'] ?? array();
+		AIIL_Usage::record(
+			$call_type,
+			$this->model,
+			$used_tier,
+			(int) ( $usage['promptTokenCount'] ?? 0 ),
+			(int) ( $usage['candidatesTokenCount'] ?? 0 ),
+			true
+		);
+
+		$text = $decoded['candidates'][0]['content']['parts'][0]['text'] ?? '';
 		if ( '' === $text ) {
 			throw new Exception( 'Gemini returned an empty response.' );
 		}

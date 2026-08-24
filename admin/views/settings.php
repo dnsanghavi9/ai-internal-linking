@@ -205,6 +205,36 @@ $settings = AIIL_Settings::all();
 			</tr>
 		</table>
 
+		<h2 id="aiil-cost-rates"><?php esc_html_e( 'Cost Tracking Rates', 'ai-internal-linking' ); ?></h2>
+		<p class="description">
+			<?php esc_html_e( 'Used only to price the Cost tab — token counts come from the API and are real; these $ per 1,000,000 token rates are what you tell the plugin to multiply them by. Gemini pricing changes over time and may differ by account/region, so verify current rates in Google AI Studio and correct these. Changing a rate re-prices the whole Cost tab instantly with no data loss.', 'ai-internal-linking' ); ?>
+		</p>
+		<table class="form-table">
+			<tr>
+				<th><label for="aiil_price_embed_per_m"><?php esc_html_e( 'Embedding — Input', 'ai-internal-linking' ); ?></label></th>
+				<td><input type="number" id="aiil_price_embed_per_m" name="aiil[price_embed_per_m]" value="<?php echo esc_attr( $settings['price_embed_per_m'] ); ?>" min="0" step="0.001" /> <?php esc_html_e( '$ / 1M tokens', 'ai-internal-linking' ); ?></td>
+			</tr>
+			<tr>
+				<th><label for="aiil_price_gen_in_per_m"><?php esc_html_e( 'Generative (Standard) — Input', 'ai-internal-linking' ); ?></label></th>
+				<td><input type="number" id="aiil_price_gen_in_per_m" name="aiil[price_gen_in_per_m]" value="<?php echo esc_attr( $settings['price_gen_in_per_m'] ); ?>" min="0" step="0.001" /> <?php esc_html_e( '$ / 1M tokens', 'ai-internal-linking' ); ?></td>
+			</tr>
+			<tr>
+				<th><label for="aiil_price_gen_out_per_m"><?php esc_html_e( 'Generative (Standard) — Output', 'ai-internal-linking' ); ?></label></th>
+				<td><input type="number" id="aiil_price_gen_out_per_m" name="aiil[price_gen_out_per_m]" value="<?php echo esc_attr( $settings['price_gen_out_per_m'] ); ?>" min="0" step="0.001" /> <?php esc_html_e( '$ / 1M tokens', 'ai-internal-linking' ); ?></td>
+			</tr>
+			<tr>
+				<th><label for="aiil_price_gen_in_flex_per_m"><?php esc_html_e( 'Generative (Flex) — Input', 'ai-internal-linking' ); ?></label></th>
+				<td><input type="number" id="aiil_price_gen_in_flex_per_m" name="aiil[price_gen_in_flex_per_m]" value="<?php echo esc_attr( $settings['price_gen_in_flex_per_m'] ); ?>" min="0" step="0.001" /> <?php esc_html_e( '$ / 1M tokens', 'ai-internal-linking' ); ?></td>
+			</tr>
+			<tr>
+				<th><label for="aiil_price_gen_out_flex_per_m"><?php esc_html_e( 'Generative (Flex) — Output', 'ai-internal-linking' ); ?></label></th>
+				<td>
+					<input type="number" id="aiil_price_gen_out_flex_per_m" name="aiil[price_gen_out_flex_per_m]" value="<?php echo esc_attr( $settings['price_gen_out_flex_per_m'] ); ?>" min="0" step="0.001" /> <?php esc_html_e( '$ / 1M tokens', 'ai-internal-linking' ); ?>
+					<p class="description"><?php esc_html_e( 'Each recorded call remembers which tier it actually ran at (Flex may silently fall back to Standard — see Logs), so historical cost stays accurate even if you change the Service Tier setting later.', 'ai-internal-linking' ); ?></p>
+				</td>
+			</tr>
+		</table>
+
 		<?php submit_button(); ?>
 	</form>
 

@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.1.0
+Stable tag: 2.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,10 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.8.0 =
+* New "Cost" tab: shows what the pipeline has actually spent on Gemini API calls, broken down by call type (Embeddings / AI Verification / AI Anchor Fallback), model, and service tier. AI Verification and AI Anchor Fallback rows use exact token counts returned by the API ("Measured"); Embedding rows are an estimate from text length, clearly labelled ("Estimated"), since the embedding API does not report token usage. Dollar cost is computed at display time from configurable $/1M-token rates in Settings, so correcting a rate re-prices the whole history instantly with no data loss. Includes a "Reset Usage Log" tool.
+* Author updated to Sanghavi Devarsh.
 
 = 2.7.0 =
 * Default generative model is now gemini-3.1-flash-lite (gemini-2.5-flash-lite is being retired for new accounts); configurable in Settings. Existing installs keep their saved model.

@@ -16,6 +16,7 @@ $tables = array(
 	$wpdb->prefix . 'aiil_site_links',
 	$wpdb->prefix . 'aiil_queue',
 	$wpdb->prefix . 'aiil_logs',
+	$wpdb->prefix . 'aiil_usage',
 );
 
 foreach ( $tables as $table ) {

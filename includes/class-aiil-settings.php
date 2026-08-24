@@ -31,6 +31,14 @@ class AIIL_Settings {
 			'auto_insert'         => 1,    // insert kept links automatically, no manual review
 			'auto_min_confidence' => 75,   // aligns with rerank_pair_min so AI-verified links actually auto-insert
 			'batch_size'          => 20,
+			// $ per 1,000,000 tokens, for the Cost tab. Defaults are a rough estimate for
+			// flash-lite-class pricing — VERIFY against your current Gemini pricing (it changes,
+			// and a free tier may apply) and correct these; the Cost tab re-prices instantly.
+			'price_embed_per_m'        => 0.15,
+			'price_gen_in_per_m'       => 0.10,
+			'price_gen_out_per_m'      => 0.40,
+			'price_gen_in_flex_per_m'  => 0.05,
+			'price_gen_out_flex_per_m' => 0.20,
 		);
 	}
 
@@ -86,6 +94,16 @@ class AIIL_Settings {
 		$out['auto_insert']         = empty( $input['auto_insert'] ) ? 0 : 1;
 		$out['auto_min_confidence'] = min( 100, max( 0, (int) ( $input['auto_min_confidence'] ?? 75 ) ) );
 		$out['batch_size']          = max( 1, min( 100, (int) ( $input['batch_size'] ?? 20 ) ) );
+
+		$rate = function ( $key, $default ) use ( $input ) {
+			return round( max( 0, (float) ( $input[ $key ] ?? $default ) ), 6 );
+		};
+		$out['price_embed_per_m']        = $rate( 'price_embed_per_m', 0.15 );
+		$out['price_gen_in_per_m']       = $rate( 'price_gen_in_per_m', 0.10 );
+		$out['price_gen_out_per_m']      = $rate( 'price_gen_out_per_m', 0.40 );
+		$out['price_gen_in_flex_per_m']  = $rate( 'price_gen_in_flex_per_m', 0.05 );
+		$out['price_gen_out_flex_per_m'] = $rate( 'price_gen_out_flex_per_m', 0.20 );
+
 		return $out;
 	}
 }

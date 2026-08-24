@@ -35,6 +35,7 @@ class AIIL_Admin {
 		add_action( 'admin_post_aiil_reevaluate', array( $this, 'handle_reevaluate' ) );
 		add_action( 'admin_post_aiil_rebuild_matches', array( $this, 'handle_rebuild_matches' ) );
 		add_action( 'admin_post_aiil_reapply_thresholds', array( $this, 'handle_reapply_thresholds' ) );
+		add_action( 'admin_post_aiil_reset_usage', array( $this, 'handle_reset_usage' ) );
 		add_action( 'wp_ajax_aiil_process_batch', array( $this, 'ajax_process_batch' ) );
 		add_action( 'wp_ajax_aiil_opportunity_ajax', array( $this, 'ajax_opportunity_action' ) );
 		add_action( 'wp_ajax_aiil_prepare_all', array( $this, 'ajax_prepare_all' ) );
@@ -62,6 +63,7 @@ class AIIL_Admin {
 			array( 'knowledge-graph',    __( 'Knowledge Graph', 'ai-internal-linking' ), 'render_knowledge_graph' ),
 			array( 'orphan-pages',       __( 'Orphans', 'ai-internal-linking' ),        'render_orphan_pages' ),
 			array( 'posts-analysis',     __( 'Indexed Posts', 'ai-internal-linking' ),  'render_posts_analysis' ),
+			array( 'cost',               __( 'Cost', 'ai-internal-linking' ),           'render_cost' ),
 			array( 'settings',           __( 'Settings', 'ai-internal-linking' ),       'render_settings' ),
 			array( 'logs',               __( 'Logs', 'ai-internal-linking' ),           'render_logs' ),
 		);
@@ -150,6 +152,11 @@ class AIIL_Admin {
 	public function render_orphan_pages() {
 		$this->check_cap();
 		include AIIL_PLUGIN_DIR . 'admin/views/orphan-pages.php';
+	}
+
+	public function render_cost() {
+		$this->check_cap();
+		include AIIL_PLUGIN_DIR . 'admin/views/cost.php';
 	}
 
 	public function render_settings() {
@@ -356,6 +363,16 @@ class AIIL_Admin {
 
 		$res = AIIL_Inserter::remove_all_inserted_links();
 		$this->redirect( 'settings', array( 'unlinked' => (int) $res['removed'], 'unlinked_posts' => (int) $res['posts'] ) );
+	}
+
+	public function handle_reset_usage() {
+		$this->check_cap();
+		check_admin_referer( 'aiil_reset_usage' );
+
+		AIIL_Usage::clear();
+		AIIL_Logger::info( 'Usage log cleared (cost tracking reset)' );
+
+		$this->redirect( 'cost', array( 'usage_reset' => 1 ) );
 	}
 
 	public function handle_export() {
