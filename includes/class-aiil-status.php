@@ -52,6 +52,7 @@ class AIIL_Status {
 			'rejected_relevance' => array( 'excluded',  __( 'AI rejected', 'ai-internal-linking' ),      __( 'AI judged the target a poor fit (product / jurisdiction / not useful).', 'ai-internal-linking' ) ),
 			'rejected'           => array( 'excluded',  __( 'Rejected', 'ai-internal-linking' ),         __( 'You rejected this suggestion.', 'ai-internal-linking' ) ),
 			'capped'             => array( 'excluded',  __( 'Over cap', 'ai-internal-linking' ),         __( 'The source already has its maximum number of links.', 'ai-internal-linking' ) ),
+			'insert_failed'      => array( 'excluded',  __( 'Insert failed', 'ai-internal-linking' ),    __( 'The anchor could not be placed in the post (usually it spans a sentence or paragraph break). Re-prepare it, or insert with your own anchor.', 'ai-internal-linking' ) ),
 			'reciprocal'         => array( 'excluded',  __( 'Reverse kept', 'ai-internal-linking' ),     __( 'The opposite direction of this pair was linked instead.', 'ai-internal-linking' ) ),
 			'low_relevance'      => array( 'excluded',  __( 'Low relevance', 'ai-internal-linking' ),    __( 'No source passage was relevant enough to host the link.', 'ai-internal-linking' ) ),
 			'invalid'            => array( 'excluded',  __( 'Invalid', 'ai-internal-linking' ),          __( 'A post in this pair is missing or unpublished.', 'ai-internal-linking' ) ),

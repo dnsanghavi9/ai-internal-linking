@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.8.0
+Stable tag: 2.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,12 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.8.1 =
+* CRITICAL: fixed a loop that repeatedly re-billed AI verification. When auto-insert failed (e.g. the anchor could not be placed), the link was reverted to "ready" — which made it eligible for AI verification again, so a permanently unplaceable link was re-verified and re-failed on every pass, forever, spending API credit with no possible progress. Such links now land in a terminal "Insert failed" state with the reason recorded, and are never re-verified automatically. They stay fully actionable: re-prepare, or insert with your own anchor.
+* Fixed the anchor selection that caused those failures. The phrase builder was blind to punctuation, so it could stitch a phrase across a sentence or paragraph boundary ("DDC Wheels. Their dually wheels", "rental cars in Bozeman, Hatch Adventures"). Because a link can only be placed inside one HTML block, those anchors could never be found in the post. Phrases now stop at sentence and clause boundaries.
+* Anchor quality: a word from the target's body now has to be corpus-distinctive (IDF) as well as repeated, and the filler-word list was widened. Previously ordinary words like "they", "also" and "get" were treated as topic words, producing anchors such as "they also get health transport billing".
+* Insertion now falls back to the stored anchor if a refined phrase cannot be placed, so a refinement can never lose an otherwise good link.
 
 = 2.8.0 =
 * New "Cost" tab: shows what the pipeline has actually spent on Gemini API calls, broken down by call type (Embeddings / AI Verification / AI Anchor Fallback), model, and service tier. AI Verification and AI Anchor Fallback rows use exact token counts returned by the API ("Measured"); Embedding rows are an estimate from text length, clearly labelled ("Estimated"), since the embedding API does not report token usage. Dollar cost is computed at display time from configurable $/1M-token rates in Settings, so correcting a rate re-prices the whole history instantly with no data loss. Includes a "Reset Usage Log" tool.

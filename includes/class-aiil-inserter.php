@@ -16,7 +16,33 @@ class AIIL_Inserter {
 		'how'=>1,'why'=>1,'what'=>1,'when'=>1,'where'=>1,'who'=>1,'this'=>1,'that'=>1,'these'=>1,'those'=>1,'it'=>1,'its'=>1,
 		'as'=>1,'about'=>1,'more'=>1,'most'=>1,'best'=>1,'top'=>1,'will'=>1,'can'=>1,'could'=>1,'would'=>1,'should'=>1,'may'=>1,
 		'new'=>1,'guide'=>1,'tips'=>1,'into'=>1,'from'=>1,'after'=>1,'before'=>1,'here'=>1,'now'=>1,'truth'=>1,'forever'=>1,
+		// Pronouns / verbs / generic nouns that are frequent in ANY article body. Without these
+		// the "appears twice in the target" rule promoted words like "they", "also" and "get"
+		// to topic words, producing anchors such as "they also get health transport billing".
+		'they'=>1,'them'=>1,'their'=>1,'there'=>1,'then'=>1,'than'=>1,'also'=>1,'just'=>1,'only'=>1,'even'=>1,'such'=>1,
+		'get'=>1,'gets'=>1,'got'=>1,'make'=>1,'makes'=>1,'made'=>1,'take'=>1,'takes'=>1,'give'=>1,'gives'=>1,'keep'=>1,
+		'use'=>1,'uses'=>1,'used'=>1,'using'=>1,'need'=>1,'needs'=>1,'want'=>1,'wants'=>1,'help'=>1,'helps'=>1,
+		'one'=>1,'two'=>1,'all'=>1,'any'=>1,'some'=>1,'many'=>1,'much'=>1,'other'=>1,'others'=>1,'same'=>1,'own'=>1,
+		'way'=>1,'ways'=>1,'thing'=>1,'things'=>1,'time'=>1,'times'=>1,'day'=>1,'days'=>1,'year'=>1,'years'=>1,
+		'good'=>1,'great'=>1,'well'=>1,'very'=>1,'like'=>1,'while'=>1,'because'=>1,'through'=>1,'over'=>1,'under'=>1,
 	);
+
+	/**
+	 * Is this word specific enough to anchor on? A word only counts as a target "topic" word if
+	 * it is not a common filler AND the corpus says it is distinctive (IDF). The IDF check is
+	 * what stops site-wide vocabulary ("transport" on a transport blog) from being treated as a
+	 * topic marker — it is corpus-derived, so it stays niche-agnostic.
+	 */
+	protected static function is_topical( $word ) {
+		$word = mb_strtolower( (string) $word );
+		if ( mb_strlen( $word ) < 3 || isset( self::$bridge[ $word ] ) || isset( self::$keystop[ $word ] ) ) {
+			return false;
+		}
+		if ( class_exists( 'AIIL_Idf' ) ) {
+			return AIIL_Idf::idf( $word ) >= AIIL_Idf::distinctive_floor();
+		}
+		return true;
+	}
 
 	/** Crude stemmer so "coating"/"coatings" and "detail"/"detailing" match. */
 	protected static function stem( $w ) {
@@ -50,23 +76,25 @@ class AIIL_Inserter {
 		// BODY repeats (freq >= 2). The body vocabulary lets us expand a lone verb like "Document"
 		// into "Document the scene" — a real phrase in the source that describes the target — even
 		// when the exact title phrase isn't present in the source passage.
+		// Title words define the target's identity, so they qualify on the filler check alone.
 		$ttok = array();
 		foreach ( preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( wp_strip_all_tags( (string) $target_title ) ), -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
 			if ( mb_strlen( $w ) >= 3 && ! isset( self::$bridge[ $w ] ) && ! isset( self::$keystop[ $w ] ) ) {
 				$ttok[ self::stem( $w ) ] = true;
 			}
 		}
+		// Body words must ALSO be corpus-distinctive: "appears twice in the target" alone let
+		// ordinary words through and produced nonsense anchors.
 		if ( '' !== $target_content ) {
 			$freq = array();
 			foreach ( preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( wp_strip_all_tags( (string) $target_content ) ), -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
-				if ( mb_strlen( $w ) >= 3 && ! isset( self::$bridge[ $w ] ) && ! isset( self::$keystop[ $w ] ) ) {
-					$s          = self::stem( $w );
-					$freq[ $s ] = ( $freq[ $s ] ?? 0 ) + 1;
+				if ( self::is_topical( $w ) ) {
+					$freq[ $w ] = ( $freq[ $w ] ?? 0 ) + 1;
 				}
 			}
-			foreach ( $freq as $s => $c ) {
+			foreach ( $freq as $w => $c ) {
 				if ( $c >= 2 ) {
-					$ttok[ $s ] = true;
+					$ttok[ self::stem( $w ) ] = true;
 				}
 			}
 		}
@@ -77,11 +105,24 @@ class AIIL_Inserter {
 		if ( ! preg_match_all( '/[\p{L}\p{N}]+/u', $passage, $tm, PREG_OFFSET_CAPTURE ) ) {
 			return $anchor;
 		}
-		$toks = array();
+		// Track what sits BETWEEN tokens. A phrase must never span a sentence or clause boundary:
+		// the stored passage is flattened plain text, but the inserter can only place a link
+		// inside ONE HTML block, so a span crossing a full stop (often a paragraph break too) can
+		// never be found in the live post — it fails to insert forever. This is what produced
+		// anchors like "DDC Wheels. Their dually wheels".
+		$toks     = array();
+		$prev_end = null;
 		foreach ( $tm[0] as $t ) {
-			$lc   = mb_strtolower( $t[0] );
-			$type = isset( $ttok[ self::stem( $lc ) ] ) ? 'key' : ( isset( self::$bridge[ $lc ] ) ? 'bridge' : 'other' );
-			$toks[] = array( 'start' => $t[1], 'end' => $t[1] + strlen( $t[0] ), 'type' => $type );
+			$start = $t[1];
+			$brk   = false;
+			if ( null !== $prev_end ) {
+				$gap = substr( $passage, $prev_end, $start - $prev_end );
+				$brk = (bool) preg_match( '/[.!?;:,\r\n|()\[\]"]|—|–|--/u', $gap );
+			}
+			$lc     = mb_strtolower( $t[0] );
+			$type   = isset( $ttok[ self::stem( $lc ) ] ) ? 'key' : ( isset( self::$bridge[ $lc ] ) ? 'bridge' : 'other' );
+			$toks[] = array( 'start' => $start, 'end' => $start + strlen( $t[0] ), 'type' => $type, 'brk' => $brk );
+			$prev_end = $start + strlen( $t[0] );
 		}
 
 		// Longest run bounded by key tokens (interior key/bridge), up to 6 words, richest in keys.
@@ -94,6 +135,9 @@ class AIIL_Inserter {
 			$keys = 0;
 			$last = $i;
 			for ( $j = $i; $j < $n && ( $j - $i ) < 6; $j++ ) {
+				if ( $j > $i && $toks[ $j ]['brk'] ) {
+					break; // punctuation boundary — stop the phrase here
+				}
 				if ( 'key' === $toks[ $j ]['type'] ) {
 					$keys++;
 					$last = $j;
@@ -170,15 +214,23 @@ class AIIL_Inserter {
 
 		$stashed  = AIIL_Placement::get_stash( (int) $opportunity_id );
 		$sentence = $stashed && ! empty( $stashed['sentence'] ) ? $stashed['sentence'] : '';
-		$anchor   = $override_anchor !== null ? (string) $override_anchor : (string) $opportunity->anchor_text;
+		$stored   = (string) $opportunity->anchor_text;
 
-		// Upgrade a lazy single-word anchor to the richest target-overlapping phrase present in
-		// the passage (helps links verified before this improvement, without re-running the AI).
-		if ( null === $override_anchor && '' !== $sentence ) {
-			$anchor = self::refine_anchor( $anchor, $sentence, $target->post_title, $target->post_content );
+		// Candidate anchors, best first. The refined phrase is preferred, but if it cannot be
+		// placed we fall back to the stored anchor rather than failing the whole insertion —
+		// a refinement should never be able to lose us a good link.
+		$candidates = array();
+		if ( null !== $override_anchor ) {
+			$candidates[] = (string) $override_anchor;
+		} else {
+			if ( '' !== $sentence ) {
+				$candidates[] = self::refine_anchor( $stored, $sentence, $target->post_title, $target->post_content );
+			}
+			$candidates[] = $stored;
 		}
+		$candidates = array_values( array_unique( array_filter( array_map( 'trim', $candidates ) ) ) );
 
-		if ( '' === trim( $anchor ) ) {
+		if ( empty( $candidates ) ) {
 			throw new Exception( 'No anchor text on opportunity ' . $opportunity_id );
 		}
 
@@ -188,13 +240,14 @@ class AIIL_Inserter {
 		$claimed = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE " . AIIL_DB::opportunities_table() . "
-				 SET status = %s WHERE id = %d AND status IN (%s, %s, %s, %s)",
+				 SET status = %s WHERE id = %d AND status IN (%s, %s, %s, %s, %s)",
 				'inserting',
 				(int) $opportunity_id,
 				'pending',
 				'ready',
 				'rewrite_suggested',
-				'verified'
+				'verified',
+				'insert_failed'
 			)
 		);
 		if ( 1 !== (int) $claimed ) {
@@ -203,10 +256,20 @@ class AIIL_Inserter {
 
 		try {
 			$target_url  = get_permalink( $target );
-			$new_content = self::replace_anchor( $source->post_content, $sentence, $anchor, $target_url );
+			$new_content = null;
+			$anchor      = '';
 
-			if ( $new_content === $source->post_content ) {
-				throw new Exception( 'Could not locate anchor "' . $anchor . '" in source content.' );
+			foreach ( $candidates as $candidate ) {
+				$attempt = self::replace_anchor( $source->post_content, $sentence, $candidate, $target_url );
+				if ( $attempt !== $source->post_content ) {
+					$new_content = $attempt;
+					$anchor      = $candidate;
+					break;
+				}
+			}
+
+			if ( null === $new_content ) {
+				throw new Exception( 'Could not locate anchor "' . $candidates[0] . '" in source content.' );
 			}
 
 			self::$skip_post_ids[] = (int) $source->ID;
@@ -239,11 +302,25 @@ class AIIL_Inserter {
 
 			self::bump_link_counts( (int) $opportunity->source_post_id, (int) $opportunity->target_post_id, 1 );
 		} catch ( Exception $e ) {
-			// Release the claim so the user can fix the anchor and retry.
 			self::$skip_post_ids = array_diff( self::$skip_post_ids, array( (int) $source->ID ) );
+
+			// Park the failure in a TERMINAL state instead of reverting to 'ready'.
+			//
+			// Reverting made the row eligible for AI verification again, so a permanently
+			// unplaceable anchor was re-verified (a paid API call) and re-failed on every pass,
+			// forever — burning money with no possible progress. 'insert_failed' is excluded from
+			// the verify query, so the cycle stops. Nothing is lost: the reason is recorded, the
+			// row stays claimable, and "Re-prepare" or a manual insert with your own anchor
+			// brings it straight back.
+			$signals = json_decode( (string) $opportunity->signals, true );
+			$signals = is_array( $signals ) ? $signals : array();
+			$signals['insert_error']    = mb_substr( $e->getMessage(), 0, 300 );
+			$signals['insert_attempts'] = (int) ( $signals['insert_attempts'] ?? 0 ) + 1;
+			$signals['insert_failed_at'] = current_time( 'mysql' );
+
 			$wpdb->update(
 				AIIL_DB::opportunities_table(),
-				array( 'status' => 'ready' ),
+				array( 'status' => 'insert_failed', 'signals' => wp_json_encode( $signals ) ),
 				array( 'id' => (int) $opportunity_id )
 			);
 			throw $e;

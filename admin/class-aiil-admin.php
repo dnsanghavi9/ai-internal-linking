@@ -289,7 +289,7 @@ class AIIL_Admin {
 			$wpdb->prepare(
 				"UPDATE " . AIIL_DB::opportunities_table() . "
 				 SET status = %s, anchor_text = NULL, confidence = NULL, passage_similarity = NULL, best_passage_id = NULL
-				 WHERE status IN ( 'ready', 'verified', 'rewrite_suggested', 'no_anchor', 'low_relevance', 'reciprocal', 'capped', 'rejected_relevance', 'error' )",
+				 WHERE status IN ( 'ready', 'verified', 'rewrite_suggested', 'no_anchor', 'low_relevance', 'reciprocal', 'capped', 'rejected_relevance', 'insert_failed', 'error' )",
 				'pending'
 			)
 		);
@@ -318,7 +318,7 @@ class AIIL_Admin {
 		// User decisions (inserted / rejected) are preserved.
 		$wpdb->query(
 			"DELETE FROM " . AIIL_DB::opportunities_table() . "
-			 WHERE status IN ( 'pending', 'ready', 'verified', 'rewrite_suggested', 'low_relevance', 'no_anchor', 'reciprocal', 'capped', 'rejected_relevance', 'invalid' )"
+			 WHERE status IN ( 'pending', 'ready', 'verified', 'rewrite_suggested', 'low_relevance', 'no_anchor', 'reciprocal', 'capped', 'rejected_relevance', 'insert_failed', 'invalid' )"
 		);
 
 		AIIL_Matcher::flush_cache();

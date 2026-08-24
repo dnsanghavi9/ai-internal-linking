@@ -360,9 +360,9 @@
 		$row.find('.aiil-confidence').text(data.confidence ? Math.round(data.confidence) : '—');
 
 		var isPending = status === 'pending';
-		var isApprovable = status === 'ready' || status === 'verified' || status === 'rewrite_suggested';
+		var isApprovable = status === 'ready' || status === 'verified' || status === 'rewrite_suggested' || status === 'insert_failed';
 		var isPrepared = status === 'ready' || status === 'rewrite_suggested';
-		var canPrepare = isPending || isPrepared || status === 'no_anchor' || status === 'low_relevance';
+		var canPrepare = isPending || isPrepared || status === 'no_anchor' || status === 'low_relevance' || status === 'insert_failed';
 
 		$form.find('.aiil-op-prepare')
 			.toggle(canPrepare)
@@ -380,6 +380,7 @@
 			no_anchor: 'No distinctive anchor in source',
 			low_relevance: 'No relevant passage to link from',
 			capped: 'Over the per-source link cap',
+			insert_failed: 'Anchor could not be placed — re-prepare or edit the anchor',
 			reciprocal: 'Reverse link kept instead',
 			invalid: 'Invalid (post missing)',
 			deleted: 'Removed'

@@ -179,9 +179,9 @@ $ready_total   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t
 				<?php foreach ( $rows as $row ) :
 					$st           = $row->status;
 					$meta         = AIIL_Status::status_meta( $st, $use_rerank );
-					$show_prepare = in_array( $st, array( 'pending', 'ready', 'rewrite_suggested', 'no_anchor', 'low_relevance' ), true );
-					$show_approve = in_array( $st, array( 'ready', 'verified', 'rewrite_suggested' ), true );
-					$show_reject  = in_array( $st, array( 'pending', 'ready', 'verified', 'rewrite_suggested' ), true );
+					$show_prepare = in_array( $st, array( 'pending', 'ready', 'rewrite_suggested', 'no_anchor', 'low_relevance', 'insert_failed' ), true );
+					$show_approve = in_array( $st, array( 'ready', 'verified', 'rewrite_suggested', 'insert_failed' ), true );
+					$show_reject  = in_array( $st, array( 'pending', 'ready', 'verified', 'rewrite_suggested', 'insert_failed' ), true );
 					$sig          = $row->signals ? json_decode( (string) $row->signals, true ) : array();
 					$reason       = '';
 					$rr           = array();
@@ -195,6 +195,7 @@ $ready_total   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t
 					$ai_scores = isset( $rr['pair_score'] )
 						? sprintf( __( 'pair %1$d · anchor %2$d', 'ai-internal-linking' ), (int) $rr['pair_score'], (int) ( $rr['anchor_score'] ?? 0 ) )
 						: '';
+					$insert_error = ( is_array( $sig ) && ! empty( $sig['insert_error'] ) ) ? (string) $sig['insert_error'] : '';
 					?>
 					<tr>
 						<td><span class="aiil-status-badge aiil-b-<?php echo esc_attr( $meta['bucket'] ); ?>" title="<?php echo esc_attr( $meta['desc'] ); ?>"><?php echo esc_html( $meta['label'] ); ?></span></td>
@@ -219,6 +220,9 @@ $ready_total   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t
 										· <?php echo esc_html( sprintf( __( 'AI would anchor: “%s”', 'ai-internal-linking' ), $ai_anchor ) ); ?>
 									<?php endif; ?>
 								</span>
+							<?php endif; ?>
+							<?php if ( '' !== $insert_error ) : ?>
+								<br /><span class="aiil-simnote">⚠ <?php echo esc_html( $insert_error ); ?></span>
 							<?php endif; ?>
 						</td>
 						<td class="aiil-confidence"><?php echo esc_html( $row->confidence ? number_format_i18n( (float) $row->confidence, 0 ) : '—' ); ?></td>

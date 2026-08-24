@@ -36,7 +36,7 @@ class AIIL_Placement {
 		if ( ! $opp ) {
 			return null;
 		}
-		if ( ! in_array( $opp->status, array( 'pending', 'ready', 'rewrite_suggested', 'no_anchor', 'low_relevance' ), true ) ) {
+		if ( ! in_array( $opp->status, array( 'pending', 'ready', 'rewrite_suggested', 'no_anchor', 'low_relevance', 'insert_failed' ), true ) ) {
 			return null; // decided (inserted/rejected/reciprocal)
 		}
 
