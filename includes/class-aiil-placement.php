@@ -132,6 +132,12 @@ class AIIL_Placement {
 			$anchor = AIIL_Inserter::refine_anchor( $anchor, $sentence, $target->post_title, $target->post_content );
 		}
 
+		// A lone filler word is not usable link text. With verification OFF this anchor is final,
+		// so drop it here rather than publish a link a reader cannot interpret.
+		if ( '' !== $anchor && ! $rerank_on && AIIL_Inserter::is_weak_lone_anchor( $anchor, $target->post_title ) ) {
+			$anchor = '';
+		}
+
 		if ( '' === $anchor && ! $rerank_on ) {
 			// AI verification is OFF, so the mechanical anchor is final — and there is no
 			// distinctive one here (only generic words). Surface it rather than ship a weak link.

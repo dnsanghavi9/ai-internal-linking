@@ -145,9 +145,13 @@ class AIIL_Reranker {
 		// the passage; anything else is simply not linked.
 		$pair_ok = $v['topic_match'] && $v['product_match'] && $v['jurisdiction_match'] && (int) $v['pair_score'] >= $pair_min;
 
-		if ( ! $pair_ok || '' === $grounded ) {
+		// A lone filler word ("helps", "buy", "trust") is not usable link text, however good the
+		// pair is — a reader cannot tell where it goes.
+		$weak_anchor = ( '' !== $grounded ) && AIIL_Inserter::is_weak_lone_anchor( $grounded, $target->post_title );
+
+		if ( ! $pair_ok || '' === $grounded || $weak_anchor ) {
 			$signals['verified']      = false;
-			$signals['reject_reason'] = ! $pair_ok ? 'pair' : 'no_anchor_in_passage';
+			$signals['reject_reason'] = ! $pair_ok ? 'pair' : ( $weak_anchor ? 'weak_anchor' : 'no_anchor_in_passage' );
 			$wpdb->update( $t, array( 'status' => 'rejected_relevance', 'anchor_text' => null, 'confidence' => null, 'signals' => wp_json_encode( $signals ) ), array( 'id' => (int) $opportunity_id ) );
 			AIIL_Placement::clear_stash( (int) $opportunity_id );
 			return array( 'result' => 'rejected', 'inserted' => false );

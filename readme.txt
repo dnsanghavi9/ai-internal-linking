@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.8.2
+Stable tag: 2.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,11 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.9.0 =
+* Anchors can now be placed even when the author split them with inline formatting. A phrase like "rental cars in Bozeman" that appears in the post as "rental cars in <strong>Bozeman</strong>" previously could not be found and the link was abandoned; it now matches, and the original formatting is preserved inside the link. Balanced-tag and nested-link guards mean a match is never wrapped in a way that would emit broken HTML.
+* One-word anchors that read as filler are no longer used. Verbs and vague nouns ("helps", "prevents", "buy", "trust", "variety", "key", "list") are rejected as lone link text, while genuine one-word topics are kept — a single word now has to either be an acronym (PPF, DIY, SIP) or actually name the destination. When a lone word is filler the refiner prefers a real multi-word phrase instead.
+* Fixed the stemmer so plurals match their singular ("brakes" now matches a "Brake Repair" title, previously stemmed to "brak"), which had been causing good one-word anchors to look unrelated to their target.
 
 = 2.8.2 =
 * Cost tab rate defaults updated to gemini-3.1-flash-lite pricing: Generative Standard 0.25 in / 1.5 out, Flex 0.125 in / 0.75 out (embeddings unchanged at 0.15), per 1M tokens. Existing sites still on the old placeholder rates are migrated automatically on update; a rate you have edited yourself is never overwritten. Rates are display-only, so this simply re-prices the Cost tab — recorded token usage is untouched.

@@ -28,6 +28,59 @@ class AIIL_Inserter {
 	);
 
 	/**
+	 * Words that read as filler when they are the ENTIRE anchor. They may be perfectly good
+	 * inside a phrase ("brake pads wear out"), so this list is only consulted for one-word
+	 * anchors — verbs and abstract nouns that tell a reader nothing about the destination.
+	 */
+	protected static $weak_lone = array(
+		'buy'=>1,'buys'=>1,'buying'=>1,'sell'=>1,'sells'=>1,'selling'=>1,'bid'=>1,'bids'=>1,'rent'=>1,'rents'=>1,
+		'help'=>1,'helps'=>1,'prevent'=>1,'prevents'=>1,'protect'=>1,'protects'=>1,'perform'=>1,'performs'=>1,
+		'develop'=>1,'develops'=>1,'provide'=>1,'provides'=>1,'ensure'=>1,'ensures'=>1,'offer'=>1,'offers'=>1,
+		'include'=>1,'includes'=>1,'improve'=>1,'improves'=>1,'reduce'=>1,'reduces'=>1,'increase'=>1,'increases'=>1,
+		'choose'=>1,'choosing'=>1,'select'=>1,'selecting'=>1,'find'=>1,'finding'=>1,'know'=>1,'knowing'=>1,
+		'begin'=>1,'begins'=>1,'change'=>1,'changing'=>1,'getting'=>1,'approved'=>1,'trust'=>1,'expert'=>1,
+		'key'=>1,'list'=>1,'lists'=>1,'variety'=>1,'factor'=>1,'factors'=>1,'future'=>1,'hours'=>1,'demand'=>1,
+		'source'=>1,'sources'=>1,'quality'=>1,'value'=>1,'values'=>1,'price'=>1,'prices'=>1,'cost'=>1,'costs'=>1,
+		'option'=>1,'options'=>1,'process'=>1,'result'=>1,'results'=>1,'level'=>1,'levels'=>1,'type'=>1,'types'=>1,
+		'part'=>1,'parts'=>1,'item'=>1,'items'=>1,'place'=>1,'area'=>1,'areas'=>1,'point'=>1,'points'=>1,
+		'step'=>1,'steps'=>1,'case'=>1,'cases'=>1,'issue'=>1,'issues'=>1,'problem'=>1,'problems'=>1,
+		'reason'=>1,'reasons'=>1,'method'=>1,'methods'=>1,'idea'=>1,'ideas'=>1,'detail'=>1,'details'=>1,
+		'information'=>1,'condition'=>1,'conditions'=>1,'standard'=>1,'standards'=>1,'range'=>1,'amount'=>1,
+		'number'=>1,'numbers'=>1,'size'=>1,'sizes'=>1,'work'=>1,'works'=>1,'job'=>1,'jobs'=>1,'task'=>1,'tasks'=>1,
+		'plan'=>1,'plans'=>1,'goal'=>1,'goals'=>1,'benefit'=>1,'benefits'=>1,'feature'=>1,'features'=>1,
+		'experience'=>1,'support'=>1,'solution'=>1,'solutions'=>1,'service'=>1,'services'=>1,'system'=>1,'systems'=>1,
+	);
+
+	/**
+	 * Would this anchor read as meaningless link text on its own?
+	 *
+	 * Only single words are ever rejected, and only when they are filler OR are not part of the
+	 * destination's title. That keeps genuine one-word topics ("brakes", "windshield", "PPF",
+	 * "dealership") while dropping verbs and vague nouns ("helps", "buy", "trust", "variety").
+	 * Acronyms are always allowed — they are the most precise anchors a page can have.
+	 */
+	public static function is_weak_lone_anchor( $anchor, $target_title = '' ) {
+		$anchor = trim( (string) $anchor );
+		if ( '' === $anchor || preg_match( '/\s/u', $anchor ) ) {
+			return false; // multi-word anchors are judged elsewhere
+		}
+		if ( preg_match( '/^[\p{Lu}\p{N}][\p{Lu}\p{N}\-]{1,7}$/u', $anchor ) ) {
+			return false; // acronym / model code (PPF, DIY, SIP, 4WD)
+		}
+		$lc = mb_strtolower( preg_replace( '/[^\p{L}\p{N}\-]+/u', '', $anchor ) );
+		if ( '' === $lc || isset( self::$weak_lone[ $lc ] ) ) {
+			return true;
+		}
+		// Otherwise it must actually name the destination.
+		foreach ( preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( wp_strip_all_tags( (string) $target_title ) ), -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+			if ( self::stem( $w ) === self::stem( $lc ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Is this word specific enough to anchor on? A word only counts as a target "topic" word if
 	 * it is not a common filler AND the corpus says it is distinctive (IDF). The IDF check is
 	 * what stops site-wide vocabulary ("transport" on a transport blog) from being treated as a
@@ -44,13 +97,33 @@ class AIIL_Inserter {
 		return true;
 	}
 
-	/** Crude stemmer so "coating"/"coatings" and "detail"/"detailing" match. */
+	/**
+	 * Crude stemmer so "coating"/"coatings" and "detail"/"detailing" match.
+	 *
+	 * Plurals are handled before the generic "-es" rule: stripping "es" from "brakes" gave
+	 * "brak", which no longer matched "brake" in the target title — so a perfectly good one-word
+	 * anchor looked like it had nothing to do with its destination.
+	 */
 	protected static function stem( $w ) {
-		$w = mb_strtolower( (string) $w );
-		foreach ( array( 'ings', 'ing', 'ies', 'es', 's' ) as $suf ) {
-			if ( mb_strlen( $w ) > strlen( $suf ) + 2 && substr( $w, -strlen( $suf ) ) === $suf ) {
-				return substr( $w, 0, -strlen( $suf ) );
-			}
+		$w   = mb_strtolower( (string) $w );
+		$len = strlen( $w );
+		if ( $len <= 3 ) {
+			return $w;
+		}
+		if ( 'ies' === substr( $w, -3 ) ) {
+			return substr( $w, 0, -3 ) . 'y';           // companies -> company
+		}
+		if ( 'ings' === substr( $w, -4 ) ) {
+			return substr( $w, 0, -4 );                  // coatings -> coat
+		}
+		if ( 'ing' === substr( $w, -3 ) && $len > 5 ) {
+			return substr( $w, 0, -3 );                  // coating -> coat
+		}
+		if ( preg_match( '/(?:s|x|z|ch|sh)es$/', $w ) ) {
+			return substr( $w, 0, -2 );                  // boxes -> box
+		}
+		if ( 's' === substr( $w, -1 ) && 'ss' !== substr( $w, -2 ) ) {
+			return substr( $w, 0, -1 );                  // brakes -> brake, tyres -> tyre
 		}
 		return $w;
 	}
@@ -126,8 +199,9 @@ class AIIL_Inserter {
 		}
 
 		// Longest run bounded by key tokens (interior key/bridge), up to 6 words, richest in keys.
-		$best = null;
-		$n    = count( $toks );
+		$best       = null;
+		$best_multi = null;
+		$n          = count( $toks );
 		for ( $i = 0; $i < $n; $i++ ) {
 			if ( 'key' !== $toks[ $i ]['type'] ) {
 				continue;
@@ -146,21 +220,39 @@ class AIIL_Inserter {
 				}
 			}
 			$words = $last - $i + 1;
+			$cand  = array( 'start' => $toks[ $i ]['start'], 'end' => $toks[ $last ]['end'], 'keys' => $keys, 'words' => $words );
 			if ( null === $best || $keys > $best['keys'] || ( $keys === $best['keys'] && $words > $best['words'] ) ) {
-				$best = array( 'start' => $toks[ $i ]['start'], 'end' => $toks[ $last ]['end'], 'keys' => $keys, 'words' => $words );
+				$best = $cand;
+			}
+			// Track the best MULTI-word phrase separately, so a one-word winner that reads as
+			// filler can be traded for a real phrase instead.
+			if ( $words > 1 && ( null === $best_multi || $keys > $best_multi['keys'] || ( $keys === $best_multi['keys'] && $words > $best_multi['words'] ) ) ) {
+				$best_multi = $cand;
 			}
 		}
 		if ( null === $best ) {
 			return $anchor;
 		}
 
-		$phrase        = trim( substr( $passage, $best['start'], $best['end'] - $best['start'] ) );
+		$grab = function ( $pick ) use ( $passage ) {
+			return trim( substr( $passage, $pick['start'], $pick['end'] - $pick['start'] ) );
+		};
+
+		$phrase = $grab( $best );
+
+		// A lone filler word is worse link text than a shorter-scoring real phrase.
+		if ( null !== $best_multi && self::is_weak_lone_anchor( $phrase, $target_title ) ) {
+			$phrase = $grab( $best_multi );
+			$best   = $best_multi;
+		}
+
 		$anchor_words  = count( preg_split( '/\s+/u', $anchor, -1, PREG_SPLIT_NO_EMPTY ) );
 		$anchor_is_key = isset( $ttok[ self::stem( preg_replace( '/[^\p{L}\p{N}]+/u', '', mb_strtolower( $anchor ) ) ) ] );
 
-		// Prefer the richer phrase: it has more words than the current anchor, or the current
-		// anchor is not even a target term (e.g. "quietly").
-		if ( '' !== $phrase && ( $best['words'] > $anchor_words || ! $anchor_is_key ) ) {
+		// Prefer the richer phrase: more words than the current anchor, the current anchor is not
+		// even a target term (e.g. "quietly"), or the current anchor is filler on its own.
+		if ( '' !== $phrase
+			&& ( $best['words'] > $anchor_words || ! $anchor_is_key || self::is_weak_lone_anchor( $anchor, $target_title ) ) ) {
 			return $phrase;
 		}
 		return $anchor;
@@ -369,14 +461,23 @@ class AIIL_Inserter {
 			(string) $content
 		);
 
-		$anchor_html = (int) AIIL_Settings::get( 'bold_links', 1 ) === 1
-			? '<strong>' . esc_html( $anchor ) . '</strong>'
-			: esc_html( $anchor );
-		// data-aiil marks this as a plugin-inserted link so "Remove inserted links" can find and
-		// unwrap exactly our own links later, without touching editorial links.
-		$link    = '<a href="' . esc_url( $url ) . '" data-aiil="1">' . $anchor_html . '</a>';
-		// Bare word-boundary matcher (inside-<a> is handled by span checks in best_offset()).
-		$pattern = '/(?<![\p{L}\p{N}])' . preg_quote( $anchor, '/' ) . '(?![\p{L}\p{N}])/iu';
+		// Match the anchor even when the author split it with inline markup — the stored passage
+		// is flattened text, so "rental cars in Bozeman" can appear in the post as
+		// "rental cars in <strong>Bozeman</strong>" and a literal match would never find it.
+		// Only INLINE tags may sit between words; block tags would mean a different paragraph.
+		$words = preg_split( '/\s+/u', $anchor, -1, PREG_SPLIT_NO_EMPTY );
+		$parts = array();
+		foreach ( $words as $w ) {
+			$parts[] = preg_quote( $w, '/' );
+		}
+		$inline = 'strong|b|em|i|span|u|mark|small|sub|sup|code|abbr';
+		$sep    = '(?:\s|&nbsp;|<\/?(?:' . $inline . ')\b[^>]*>)+';
+		// Optional leading opens / trailing closes so a partially-marked-up phrase is captured
+		// WHOLE ("<em>interior</em> cleaning", "rental cars in <strong>Bozeman</strong>").
+		// Without these the match would stop mid-tag and produce broken HTML when wrapped.
+		$open    = '(?:<(?:' . $inline . ')\b[^>]*>)*';
+		$close   = '(?:<\/(?:' . $inline . ')\s*>)*';
+		$pattern = '/' . $open . '(?<![\p{L}\p{N}])' . implode( $sep, $parts ) . '(?![\p{L}\p{N}])' . $close . '/iu';
 		$min_gap = (int) AIIL_Settings::get( 'link_word_gap', 3 );
 
 		$sentence = trim( (string) $sentence );
@@ -399,7 +500,8 @@ class AIIL_Inserter {
 
 					$spot = self::best_offset( $block_html, $pattern, $min_gap );
 					if ( $spot && $spot['gap'] >= $min_gap ) {
-						$new_block = substr( $block_html, 0, $spot['offset'] ) . $link . substr( $block_html, $spot['offset'] + $spot['length'] );
+						$matched   = substr( $block_html, $spot['offset'], $spot['length'] );
+						$new_block = substr( $block_html, 0, $spot['offset'] ) . self::build_link( $matched, $url ) . substr( $block_html, $spot['offset'] + $spot['length'] );
 						$result    = substr( $protected, 0, $byte_offset ) . $new_block . substr( $protected, $byte_offset + strlen( $block_html ) );
 						break;
 					}
@@ -413,12 +515,49 @@ class AIIL_Inserter {
 			// no spot fully meets the gap, we pick the roomiest available.
 			$spot = self::best_offset( $protected, $pattern, $min_gap );
 			if ( $spot ) {
-				$result = substr( $protected, 0, $spot['offset'] ) . $link . substr( $protected, $spot['offset'] + $spot['length'] );
+				$matched = substr( $protected, $spot['offset'], $spot['length'] );
+				$result  = substr( $protected, 0, $spot['offset'] ) . self::build_link( $matched, $url ) . substr( $protected, $spot['offset'] + $spot['length'] );
 			}
 		}
 
 		// Restore the shielded headings/regions verbatim.
 		return strtr( null === $result ? $protected : $result, $shields );
+	}
+
+	/**
+	 * Wrap the matched source text in our link, keeping whatever inline markup it already had —
+	 * so linking "rental cars in <strong>Bozeman</strong>" preserves the author's formatting
+	 * instead of flattening it. data-aiil marks the link as ours so "Remove inserted links" can
+	 * find and unwrap exactly our own links later.
+	 */
+	/**
+	 * True when every inline tag opened in this fragment is also closed in it (and never closed
+	 * before it is opened). Guards against wrapping a span that would produce invalid markup.
+	 */
+	protected static function tags_balanced( $html ) {
+		if ( ! preg_match_all( '/<(\/?)([a-z0-9]+)\b[^>]*>/i', (string) $html, $m, PREG_SET_ORDER ) ) {
+			return true; // no tags at all
+		}
+		$stack = array();
+		foreach ( $m as $tag ) {
+			$name = strtolower( $tag[2] );
+			if ( '' === $tag[1] ) {
+				$stack[] = $name;
+			} else {
+				if ( empty( $stack ) || array_pop( $stack ) !== $name ) {
+					return false; // closed something that was not open here
+				}
+			}
+		}
+		return empty( $stack );
+	}
+
+	protected static function build_link( $matched, $url ) {
+		$inner = (string) $matched;
+		if ( (int) AIIL_Settings::get( 'bold_links', 1 ) === 1 && ! preg_match( '/<(?:strong|b)\b/i', $inner ) ) {
+			$inner = '<strong>' . $inner . '</strong>';
+		}
+		return '<a href="' . esc_url( $url ) . '" data-aiil="1">' . $inner . '</a>';
 	}
 
 	/**
@@ -447,6 +586,13 @@ class AIIL_Inserter {
 			$ce  = $cs + strlen( $m[0] );
 			$gap = PHP_INT_MAX;
 			$bad = false;
+
+			// Tag-tolerant matching could span an existing <a>, or stop mid-tag. Never nest links,
+			// and never wrap a span whose inline tags are unbalanced — that would emit broken
+			// HTML like "<a ...>text <strong>word</a></strong>".
+			if ( false !== stripos( $m[0], '<a' ) || ! self::tags_balanced( $m[0] ) ) {
+				continue;
+			}
 
 			foreach ( $links as $L ) {
 				if ( $cs >= $L[0] && $ce <= $L[1] ) {
