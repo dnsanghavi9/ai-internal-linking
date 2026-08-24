@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.8.1
+Stable tag: 2.8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,9 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.8.2 =
+* Cost tab rate defaults updated to gemini-3.1-flash-lite pricing: Generative Standard 0.25 in / 1.5 out, Flex 0.125 in / 0.75 out (embeddings unchanged at 0.15), per 1M tokens. Existing sites still on the old placeholder rates are migrated automatically on update; a rate you have edited yourself is never overwritten. Rates are display-only, so this simply re-prices the Cost tab — recorded token usage is untouched.
 
 = 2.8.1 =
 * CRITICAL: fixed a loop that repeatedly re-billed AI verification. When auto-insert failed (e.g. the anchor could not be placed), the link was reverted to "ready" — which made it eligible for AI verification again, so a permanently unplaceable link was re-verified and re-failed on every pass, forever, spending API credit with no possible progress. Such links now land in a terminal "Insert failed" state with the reason recorded, and are never re-verified automatically. They stay fully actionable: re-prepare, or insert with your own anchor.

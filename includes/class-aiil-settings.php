@@ -31,14 +31,15 @@ class AIIL_Settings {
 			'auto_insert'         => 1,    // insert kept links automatically, no manual review
 			'auto_min_confidence' => 75,   // aligns with rerank_pair_min so AI-verified links actually auto-insert
 			'batch_size'          => 20,
-			// $ per 1,000,000 tokens, for the Cost tab. Defaults are a rough estimate for
-			// flash-lite-class pricing — VERIFY against your current Gemini pricing (it changes,
-			// and a free tier may apply) and correct these; the Cost tab re-prices instantly.
+			// $ per 1,000,000 tokens, for the Cost tab. Defaults reflect gemini-3.1-flash-lite
+			// (Flex is half the Standard rate) — VERIFY against your current Gemini pricing (it
+			// changes, and a free tier may apply) and correct these; the Cost tab re-prices
+			// instantly from these numbers, so a correction needs no re-fetching of usage.
 			'price_embed_per_m'        => 0.15,
-			'price_gen_in_per_m'       => 0.10,
-			'price_gen_out_per_m'      => 0.40,
-			'price_gen_in_flex_per_m'  => 0.05,
-			'price_gen_out_flex_per_m' => 0.20,
+			'price_gen_in_per_m'       => 0.25,
+			'price_gen_out_per_m'      => 1.5,
+			'price_gen_in_flex_per_m'  => 0.125,
+			'price_gen_out_flex_per_m' => 0.75,
 		);
 	}
 
@@ -99,10 +100,10 @@ class AIIL_Settings {
 			return round( max( 0, (float) ( $input[ $key ] ?? $default ) ), 6 );
 		};
 		$out['price_embed_per_m']        = $rate( 'price_embed_per_m', 0.15 );
-		$out['price_gen_in_per_m']       = $rate( 'price_gen_in_per_m', 0.10 );
-		$out['price_gen_out_per_m']      = $rate( 'price_gen_out_per_m', 0.40 );
-		$out['price_gen_in_flex_per_m']  = $rate( 'price_gen_in_flex_per_m', 0.05 );
-		$out['price_gen_out_flex_per_m'] = $rate( 'price_gen_out_flex_per_m', 0.20 );
+		$out['price_gen_in_per_m']       = $rate( 'price_gen_in_per_m', 0.25 );
+		$out['price_gen_out_per_m']      = $rate( 'price_gen_out_per_m', 1.5 );
+		$out['price_gen_in_flex_per_m']  = $rate( 'price_gen_in_flex_per_m', 0.125 );
+		$out['price_gen_out_flex_per_m'] = $rate( 'price_gen_out_flex_per_m', 0.75 );
 
 		return $out;
 	}

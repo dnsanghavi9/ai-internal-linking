@@ -26,9 +26,44 @@ class AIIL_Activator {
 		self::drop_legacy_schema();
 		self::install_schema();
 		self::ensure_scheduled_events();
+		self::migrate_price_defaults();
 		update_option( 'aiil_db_version', AIIL_VERSION );
 
 		AIIL_Logger::info( 'Database schema upgraded', array( 'version' => AIIL_VERSION ) );
+	}
+
+	/**
+	 * Move sites still on the original (placeholder) Cost-tab rates onto the gemini-3.1-flash-lite
+	 * rates. A stored value is only replaced when it still exactly equals the old default — if you
+	 * have edited a rate for your own account/region it is left alone. Rates are display-only, so
+	 * this re-prices the Cost tab and changes nothing about recorded usage.
+	 */
+	protected static function migrate_price_defaults() {
+		$settings = get_option( AIIL_Settings::OPTION_KEY, array() );
+		if ( ! is_array( $settings ) ) {
+			return;
+		}
+
+		$moves = array(
+			// key => [ old default, new default ]
+			'price_gen_in_per_m'       => array( 0.10, 0.25 ),
+			'price_gen_out_per_m'      => array( 0.40, 1.5 ),
+			'price_gen_in_flex_per_m'  => array( 0.05, 0.125 ),
+			'price_gen_out_flex_per_m' => array( 0.20, 0.75 ),
+		);
+
+		$changed = false;
+		foreach ( $moves as $key => $pair ) {
+			if ( isset( $settings[ $key ] ) && abs( (float) $settings[ $key ] - $pair[0] ) < 0.0000001 ) {
+				$settings[ $key ] = $pair[1];
+				$changed          = true;
+			}
+		}
+
+		if ( $changed ) {
+			update_option( AIIL_Settings::OPTION_KEY, $settings );
+			AIIL_Logger::info( 'Cost tab rates updated to gemini-3.1-flash-lite pricing (customised rates kept)' );
+		}
 	}
 
 	/**
