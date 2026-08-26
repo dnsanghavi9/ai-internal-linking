@@ -92,8 +92,27 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 		$out = array();
 		foreach ( $rows as $row ) {
 			$values = $row['values'] ?? null;
-			$out[]  = is_array( $values ) ? array_map( 'floatval', $values ) : null;
+			$out[]  = is_array( $values ) && ! empty( $values ) ? array_map( 'floatval', $values ) : null;
 		}
+
+		// The caller aligns these 1:1 with the texts it sent, so a short or gappy response must
+		// NOT be accepted silently. Under quota pressure the API can return fewer embeddings than
+		// requested; letting that through stored a document vector with no passages behind it,
+		// which made every later link fail the passage-relevance gate for no visible reason.
+		$missing = count( $texts ) - count( $out );
+		$nulls   = count( array_filter( $out, function ( $v ) { return null === $v; } ) );
+		if ( $missing > 0 || $nulls > 0 ) {
+			throw new Exception(
+				sprintf(
+					'Embedding response was incomplete: sent %d texts, usable vectors %d (missing %d, empty %d). Usually a rate/quota limit — the job will retry.',
+					count( $texts ),
+					count( $out ) - $nulls,
+					max( 0, $missing ),
+					$nulls
+				)
+			);
+		}
+
 		return $out;
 	}
 

@@ -91,7 +91,25 @@ class AIIL_Indexer {
 		$content_hash = md5( $title . '|' . implode( '|', $passages ) );
 		$existing     = self::meta( $post_id );
 		if ( $existing && (string) $existing->content_hash === $content_hash && (int) $existing->passage_count > 0 ) {
-			return array( 'passage_count' => (int) $existing->passage_count, 'skipped' => true );
+			// Trust the recorded count only if the passage rows are really there. A post indexed
+			// by an older build could carry a count with no rows behind it; re-indexing would
+			// then skip it forever and it could never produce a usable link. Verifying here means
+			// a plain re-index repairs such a site — no need to clear plugin data.
+			global $wpdb;
+			$actual = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM " . AIIL_DB::passages_table() . " WHERE post_id = %d AND blog_id = %d",
+					$post_id,
+					get_current_blog_id()
+				)
+			);
+			if ( $actual > 0 ) {
+				return array( 'passage_count' => $actual, 'skipped' => true );
+			}
+			AIIL_Logger::warning(
+				'Stored passage count had no passages behind it — re-indexing',
+				array( 'post_id' => $post_id, 'recorded' => (int) $existing->passage_count )
+			);
 		}
 
 		// Embed the title first, then the body passages, in one batch.
@@ -110,6 +128,37 @@ class AIIL_Indexer {
 		$blog_id  = get_current_blog_id();
 		$max_out  = (int) AIIL_Settings::get( 'max_outgoing_links', 3 );
 
+		// Write the passages FIRST, then record how many actually landed. Doing it the other way
+		// round let a post be marked indexed with a passage_count that never matched reality —
+		// the post then looked healthy while every link it produced failed the passage gate.
+		$wpdb->delete( AIIL_DB::passages_table(), array( 'post_id' => $post_id, 'blog_id' => $blog_id ) );
+		$stored = 0;
+		foreach ( $passages as $i => $text ) {
+			if ( empty( $vectors[ $i ] ) ) {
+				continue;
+			}
+			$ok = $wpdb->insert(
+				AIIL_DB::passages_table(),
+				array(
+					'post_id' => $post_id,
+					'blog_id' => $blog_id,
+					'idx'     => (int) $i,
+					'text'    => $text,
+					'vector'  => wp_json_encode( $vectors[ $i ] ),
+				)
+			);
+			if ( $ok ) {
+				$stored++;
+			}
+		}
+
+		// A post with no stored passages can never host a link, so refuse to record it as indexed.
+		// Throwing keeps the job in the queue to retry instead of leaving a post that looks fine
+		// but silently poisons every opportunity it takes part in.
+		if ( $stored < 1 ) {
+			throw new Exception( 'No passages could be stored for post ' . $post_id . ' — not marking it indexed.' );
+		}
+
 		// Upsert the post row, preserving link counters on update.
 		$wpdb->query(
 			$wpdb->prepare(
@@ -126,33 +175,15 @@ class AIIL_Indexer {
 				$blog_id,
 				wp_json_encode( $doc_vector ),
 				$content_hash,
-				count( $passages ),
+				$stored,
 				$max_out,
 				$now,
 				$now
 			)
 		);
 
-		// Replace passages.
-		$wpdb->delete( AIIL_DB::passages_table(), array( 'post_id' => $post_id, 'blog_id' => $blog_id ) );
-		foreach ( $passages as $i => $text ) {
-			if ( empty( $vectors[ $i ] ) ) {
-				continue;
-			}
-			$wpdb->insert(
-				AIIL_DB::passages_table(),
-				array(
-					'post_id' => $post_id,
-					'blog_id' => $blog_id,
-					'idx'     => (int) $i,
-					'text'    => $text,
-					'vector'  => wp_json_encode( $vectors[ $i ] ),
-				)
-			);
-		}
-
-		AIIL_Logger::info( 'Indexed post', array( 'post_id' => $post_id, 'passages' => count( $passages ) ) );
-		return array( 'passage_count' => count( $passages ) );
+		AIIL_Logger::info( 'Indexed post', array( 'post_id' => $post_id, 'passages_stored' => $stored, 'chunks' => count( $passages ) ) );
+		return array( 'passage_count' => $stored );
 	}
 
 	public static function delete( $post_id ) {

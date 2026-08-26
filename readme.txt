@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.9.0
+Stable tag: 2.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,12 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.9.1 =
+* CRITICAL: a partial embedding response could silently produce posts with a document vector but NO stored passages. Because links are placed inside passages, every suggestion from such a post then failed the relevance gate and was filed as "Low relevance" — a site could index cleanly, generate thousands of opportunities, and end up unable to insert a single link, with no visible error. Most likely to hit large sites on a rate-limited or free-tier API key.
+* The embedding call now fails loudly when the API returns fewer vectors than texts sent (typically a quota/rate limit), so the job retries instead of storing an unusable index.
+* Indexing now writes passages first and records the number ACTUALLY stored. Previously it logged and saved the number of text chunks prepared, which hid the failure and left a passage_count that did not match reality. A post with zero stored passages is no longer marked as indexed.
+* Re-indexing now self-heals a site already in this state: a recorded passage count is trusted only if the passage rows really exist, so a plain re-index repairs it — no need to clear plugin data.
 
 = 2.9.0 =
 * Anchors can now be placed even when the author split them with inline formatting. A phrase like "rental cars in Bozeman" that appears in the post as "rental cars in <strong>Bozeman</strong>" previously could not be found and the link was abandoned; it now matches, and the original formatting is preserved inside the link. Balanced-tag and nested-link guards mean a match is never wrapped in a way that would emit broken HTML.
