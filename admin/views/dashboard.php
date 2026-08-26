@@ -50,6 +50,30 @@ $step3_done = $rerank_on ? ( 0 === $awaiting && $ready_insert > 0 ) : $step2_don
 		<?php echo AIIL_Admin::export_button( 'eval', __( 'Run eval (JSON)', 'ai-internal-linking' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 	</p>
 
+	<?php if ( isset( $_GET['requeued'] ) ) : ?>
+		<div class="notice notice-success is-dismissible"><p>
+			<?php printf( esc_html__( 'Requeued %d failed job(s). Run the pipeline to process them.', 'ai-internal-linking' ), (int) $_GET['requeued'] ); ?>
+		</p></div>
+	<?php endif; ?>
+
+	<?php if ( AIIL_Queue::is_backing_off() ) : ?>
+		<div class="notice notice-warning"><p>
+			<?php esc_html_e( 'Paused: the API is rate limiting this key (quota or requests per minute). Processing resumes automatically in a couple of minutes — nothing is lost, queued posts are retried. If this keeps happening on a large site, check your Gemini quota or billing.', 'ai-internal-linking' ); ?>
+		</p></div>
+	<?php endif; ?>
+
+	<?php if ( (int) $queue['failed'] > 0 ) : ?>
+		<div class="notice notice-warning"><p>
+			<?php printf( esc_html__( '%d queued job(s) failed and were given up on — those posts are not indexed, so they can neither give nor receive links. See the Logs tab for the reason.', 'ai-internal-linking' ), (int) $queue['failed'] ); ?>
+			</p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:0 0 10px">
+				<input type="hidden" name="action" value="aiil_retry_failed" />
+				<?php wp_nonce_field( 'aiil_retry_failed' ); ?>
+				<button type="submit" class="button"><?php esc_html_e( 'Retry failed jobs', 'ai-internal-linking' ); ?></button>
+			</form>
+		</div>
+	<?php endif; ?>
+
 	<?php if ( ! $has_api_key ) : ?>
 		<div class="notice notice-error"><p>
 			<?php

@@ -36,6 +36,7 @@ class AIIL_Admin {
 		add_action( 'admin_post_aiil_rebuild_matches', array( $this, 'handle_rebuild_matches' ) );
 		add_action( 'admin_post_aiil_reapply_thresholds', array( $this, 'handle_reapply_thresholds' ) );
 		add_action( 'admin_post_aiil_reset_usage', array( $this, 'handle_reset_usage' ) );
+		add_action( 'admin_post_aiil_retry_failed', array( $this, 'handle_retry_failed' ) );
 		add_action( 'wp_ajax_aiil_process_batch', array( $this, 'ajax_process_batch' ) );
 		add_action( 'wp_ajax_aiil_opportunity_ajax', array( $this, 'ajax_opportunity_action' ) );
 		add_action( 'wp_ajax_aiil_prepare_all', array( $this, 'ajax_prepare_all' ) );
@@ -365,6 +366,14 @@ class AIIL_Admin {
 		$this->redirect( 'settings', array( 'unlinked' => (int) $res['removed'], 'unlinked_posts' => (int) $res['posts'] ) );
 	}
 
+	public function handle_retry_failed() {
+		$this->check_cap();
+		check_admin_referer( 'aiil_retry_failed' );
+
+		$count = AIIL_Queue::retry_failed();
+		$this->redirect( '', array( 'requeued' => (int) $count ) );
+	}
+
 	public function handle_reset_usage() {
 		$this->check_cap();
 		check_admin_referer( 'aiil_reset_usage' );
@@ -673,6 +682,9 @@ class AIIL_Admin {
 				'processed' => (int) $processed,
 				'remaining' => $remaining,
 				'counts'    => $counts,
+				// Tells the browser runner to wait it out quietly instead of retrying every
+				// second and turning a throttled key into hundreds of pointless requests.
+				'backoff'   => AIIL_Queue::is_backing_off(),
 			)
 		);
 	}

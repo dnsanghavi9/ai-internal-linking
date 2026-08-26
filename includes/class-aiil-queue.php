@@ -17,6 +17,28 @@ class AIIL_Queue {
 
 	const MAX_ATTEMPTS = 3;
 
+	/** Transient set while the API is rate limiting us; the worker pauses until it expires. */
+	const BACKOFF_KEY     = 'aiil_rate_limited_until';
+	const BACKOFF_SECONDS = 120;
+
+	/**
+	 * Is this failure the API telling us to slow down, rather than a problem with the job?
+	 * Quota/rate/overload errors are transient and must not burn the job's retry budget —
+	 * otherwise a large site indexing hundreds of posts permanently loses every post that
+	 * happened to run while the key was throttled.
+	 */
+	public static function is_rate_limit_error( $message ) {
+		return (bool) preg_match(
+			'/\b(?:429|503)\b|RESOURCE_EXHAUSTED|UNAVAILABLE|quota|rate limit|too many requests|overloaded/i',
+			(string) $message
+		);
+	}
+
+	/** True while we are backing off from a rate limit. */
+	public static function is_backing_off() {
+		return (bool) get_transient( self::BACKOFF_KEY );
+	}
+
 	/**
 	 * Add a job to the queue.
 	 *
@@ -123,6 +145,12 @@ class AIIL_Queue {
 
 	public static function process_tick( $limit = null ) {
 		global $wpdb;
+
+		// Stop while the API is throttling us. Continuing would just convert every queued post
+		// into another rate-limit error, and on a large site that is how a whole batch gets lost.
+		if ( self::is_backing_off() ) {
+			return 0;
+		}
 
 		// Single-flight: only one worker drains the queue at a time. Prevents duplicate
 		// work when cron and the browser runner overlap, and keeps request concurrency
@@ -321,6 +349,27 @@ class AIIL_Queue {
 	protected static function mark_failed_or_retry( $job, $error ) {
 		global $wpdb;
 
+		// Rate limiting is not the job's fault. Refund the attempt, put the job straight back in
+		// the queue, and pause the whole worker briefly so we stop hammering a throttled key.
+		if ( self::is_rate_limit_error( $error ) ) {
+			set_transient( self::BACKOFF_KEY, time(), self::BACKOFF_SECONDS );
+			$wpdb->update(
+				AIIL_DB::queue_table(),
+				array(
+					'status'     => self::STATUS_PENDING,
+					'attempts'   => max( 0, (int) $job->attempts - 1 ),
+					'last_error' => $error,
+					'updated_at' => current_time( 'mysql' ),
+				),
+				array( 'id' => (int) $job->id )
+			);
+			AIIL_Logger::warning(
+				'API rate limit — pausing the queue and retrying this job later',
+				array( 'job_id' => (int) $job->id, 'post_id' => (int) $job->post_id, 'pause_seconds' => self::BACKOFF_SECONDS )
+			);
+			return;
+		}
+
 		$status = ( (int) $job->attempts >= self::MAX_ATTEMPTS ) ? self::STATUS_FAILED : self::STATUS_PENDING;
 
 		$wpdb->update(
@@ -343,6 +392,30 @@ class AIIL_Queue {
 				'status'   => $status,
 			)
 		);
+	}
+
+	/**
+	 * Put failed jobs back in the queue with a fresh attempt budget. Without this a post that
+	 * failed three times (typically while the API key was throttled) is abandoned permanently
+	 * with no way back short of clearing all plugin data.
+	 *
+	 * @return int Number of jobs requeued.
+	 */
+	public static function retry_failed() {
+		global $wpdb;
+		$count = (int) $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE " . AIIL_DB::queue_table() . "
+				 SET status = %s, attempts = 0, last_error = NULL, updated_at = %s
+				 WHERE status = %s",
+				self::STATUS_PENDING,
+				current_time( 'mysql' ),
+				self::STATUS_FAILED
+			)
+		);
+		delete_transient( self::BACKOFF_KEY ); // let the worker start again immediately
+		AIIL_Logger::info( 'Requeued failed jobs', array( 'jobs' => $count ) );
+		return $count;
 	}
 
 	public static function purge_completed( $older_than_days = 7 ) {

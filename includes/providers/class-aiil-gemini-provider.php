@@ -10,6 +10,8 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 	const BATCH_ENDPOINT     = 'https://generativelanguage.googleapis.com/v1beta/models/%s:batchEmbedContents';
 	const EMBED_MODEL        = 'gemini-embedding-001';
 	const EMBED_DIMENSIONS   = 768;
+	/** Texts per embedding request. Keeps payloads small on long posts (filterable). */
+	const EMBED_BATCH_SIZE   = 20;
 
 	protected $api_key;
 	protected $model;
@@ -35,6 +37,14 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 		return $out[0];
 	}
 
+	/**
+	 * Embed many texts, in bounded chunks.
+	 *
+	 * A long post can produce 60+ passages; sending them as one request makes an oversized
+	 * payload that is far more likely to be rejected or truncated. Chunking keeps each request
+	 * small and predictable, and a failure only affects that chunk. Vectors are returned in the
+	 * original order, one per input — callers rely on that alignment.
+	 */
 	public function embed_batch( array $texts ) {
 		if ( empty( $this->api_key ) ) {
 			throw new Exception( 'Gemini API key is not configured.' );
@@ -43,6 +53,21 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			return array();
 		}
 
+		$size = max( 1, (int) apply_filters( 'aiil_embed_batch_size', self::EMBED_BATCH_SIZE ) );
+		if ( count( $texts ) <= $size ) {
+			return $this->embed_chunk( $texts );
+		}
+
+		$out = array();
+		foreach ( array_chunk( $texts, $size ) as $chunk ) {
+			foreach ( $this->embed_chunk( $chunk ) as $vec ) {
+				$out[] = $vec;
+			}
+		}
+		return $out;
+	}
+
+	protected function embed_chunk( array $texts ) {
 		$model = $this->embed_model();
 		$dims  = $this->dimensions();
 		$url   = add_query_arg( 'key', $this->api_key, sprintf( self::BATCH_ENDPOINT, rawurlencode( $model ) ) );

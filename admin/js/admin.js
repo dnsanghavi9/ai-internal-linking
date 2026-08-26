@@ -127,7 +127,13 @@
 					var pct = total > 0 ? Math.round(((total - remaining) / total) * 100) : 100;
 					say(label + ' — ' + remaining + ' left', pct);
 					if (remaining > 0) {
-						(res.data.processed === 0) ? window.setTimeout(tick, 1200) : tick();
+						if (res.data.backoff) {
+							// API is throttling us; wait it out instead of hammering the key.
+							say(label + ' — paused, API rate limit (retrying shortly)', pct);
+							window.setTimeout(tick, 15000);
+						} else {
+							(res.data.processed === 0) ? window.setTimeout(tick, 1200) : tick();
+						}
 					} else {
 						setStep(phase, 'done');
 						done();
@@ -440,7 +446,10 @@
 						// If nothing was processed this round, another worker likely holds the
 						// queue lock (or claims briefly collided) — back off before retrying so
 						// we don't busy-spin the server.
-						if (processed === 0) {
+						if (res.data.backoff) {
+							$label.text('Paused — API rate limit. Retrying shortly; nothing is lost.');
+							window.setTimeout(tick, 15000);
+						} else if (processed === 0) {
 							window.setTimeout(tick, 1500);
 						} else {
 							tick();

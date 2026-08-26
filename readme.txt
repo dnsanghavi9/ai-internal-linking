@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.9.1
+Stable tag: 2.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,13 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.10.0 =
+* Hardened indexing for large sites (500+ posts), where API rate limits are hit routinely.
+* Rate limits no longer destroy work. A 429/quota/overload error is recognised as the API asking us to slow down: the job keeps its retry budget, goes straight back in the queue, and the worker pauses for two minutes. Previously three throttled attempts marked a post permanently failed, so a large site could silently lose dozens of posts — unindexed posts can neither give nor receive links.
+* Embedding requests are now sent in bounded chunks (20 texts each) instead of one huge request per post. A long post could previously send 60+ texts in a single call, which is far more likely to be rejected or truncated.
+* Failed jobs are recoverable: the Dashboard now warns when jobs have been given up on and offers "Retry failed jobs", which requeues them with a fresh attempt budget. Previously the only way back was clearing all plugin data.
+* The Dashboard shows when processing is paused by a rate limit, and the browser runner waits it out instead of retrying every second against a throttled key.
 
 = 2.9.1 =
 * CRITICAL: a partial embedding response could silently produce posts with a document vector but NO stored passages. Because links are placed inside passages, every suggestion from such a post then failed the relevance gate and was filed as "Low relevance" — a site could index cleanly, generate thousands of opportunities, and end up unable to insert a single link, with no visible error. Most likely to hit large sites on a rate-limited or free-tier API key.
