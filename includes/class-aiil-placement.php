@@ -65,7 +65,7 @@ class AIIL_Placement {
 		$best      = null;
 		$best_score = -1.0;
 		foreach ( AIIL_Indexer::passages( (int) $source->ID ) as $p ) {
-			$vec = AIIL_Vector::decode( $p->vector );
+			$vec = AIIL_Vector::decode( $p->embedding );
 			if ( ! $vec ) {
 				continue;
 			}
@@ -98,18 +98,18 @@ class AIIL_Placement {
 		// cap is applied to the kept set. See AIIL_Placement::finalize_ready() and the reranker.
 
 		// --- Anchor selection ----------------------------------------------------------
-		$picked   = self::best_anchor( $best->text, $target );
+		$picked   = self::best_anchor( $best->passage_text, $target );
 		$anchor   = $picked ? $picked['anchor'] : '';
 		$spec     = $picked ? $picked['spec'] : 0.0;
 		$rewrite  = false;
-		$sentence = $best->text;
+		$sentence = $best->passage_text;
 		$ai_conf  = null;
 
 		if ( '' === $anchor && (int) AIIL_Settings::get( 'use_ai_anchor', 0 ) === 1 ) {
 			try {
-				$ai = AIIL_Indexer::provider()->pick_anchor( $best->text, $target->post_title );
+				$ai = AIIL_Indexer::provider()->pick_anchor( $best->passage_text, $target->post_title );
 				$candidate = trim( (string) ( $ai['anchor'] ?? '' ) );
-				$sent      = (string) ( $ai['sentence'] ?? $best->text );
+				$sent      = (string) ( $ai['sentence'] ?? $best->passage_text );
 				if ( '' !== $candidate && false !== mb_stripos( $sent, $candidate ) ) {
 					$anchor   = $candidate;
 					$spec     = self::phrase_spec( $candidate, $target );
@@ -145,7 +145,7 @@ class AIIL_Placement {
 				'status'             => 'no_anchor',
 				'passage_similarity' => $passage_score,
 				'best_passage_id'    => (int) $best->id,
-				'signals'            => array( 'passage_score' => $passage_score, 'reason' => 'no_distinctive_anchor', 'best_passage' => $best->text ),
+				'signals'            => array( 'passage_score' => $passage_score, 'reason' => 'no_distinctive_anchor', 'best_passage' => $best->passage_text ),
 			) );
 			return null;
 		}
@@ -169,7 +169,7 @@ class AIIL_Placement {
 				'anchor_spec'   => round( $spec, 2 ),
 				'retrieval'     => 'passage',
 				'ai_anchor'     => ( null !== $ai_conf ),
-				'best_passage'  => $best->text,
+				'best_passage'  => $best->passage_text,
 			),
 		) );
 

@@ -324,7 +324,7 @@ class AIIL_Reranker {
 		if ( ! empty( $passages ) ) {
 			$parts = array();
 			foreach ( array_slice( $passages, 0, 2 ) as $p ) {
-				$parts[] = $p->text;
+				$parts[] = $p->passage_text;
 			}
 			return implode( ' ', $parts );
 		}

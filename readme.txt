@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.10.1
+Stable tag: 2.10.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,10 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.10.2 =
+* Completes the 2.10.1 fix. Renaming the columns was right, but the passage query then aliased them straight back ("embedding AS vector") — and VECTOR is reserved in MySQL 9 / MariaDB 11.7 even when used as an ALIAS, so the SELECT was still a syntax error and passages were still invisible to link placement. The query and its callers now use the real column names throughout.
+* On affected sites the stored passages are already correct, so no re-indexing and no new embedding spend is needed — Review Links → Re-evaluate is enough to reprocess them.
 
 = 2.10.1 =
 * CRITICAL: found the real reason some sites could index every post yet never place a single link. The passages table declared a column named "vector", which became a RESERVED WORD in MySQL 9.0 and MariaDB 11.7. On those servers the CREATE TABLE silently failed, so the table never existed, every passage insert failed, and posts were recorded as indexed with no passages behind them — every link then failed the passage-relevance gate and was filed as "Low relevance". Sites on older MySQL were unaffected, which is why this only appeared on some hosts.

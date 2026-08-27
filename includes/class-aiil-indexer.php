@@ -212,7 +212,10 @@ class AIIL_Indexer {
 		global $wpdb;
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT id, idx, passage_text AS text, embedding AS vector FROM " . AIIL_DB::passages_table() . " WHERE post_id = %d AND blog_id = %d ORDER BY idx ASC",
+				// Do NOT alias these back to `text` / `vector`: VECTOR is reserved in MySQL 9 /
+				// MariaDB 11.7 even as a column ALIAS, which makes the whole SELECT a syntax
+				// error and silently returns no passages. Callers use the real column names.
+				"SELECT id, idx, passage_text, embedding FROM " . AIIL_DB::passages_table() . " WHERE post_id = %d AND blog_id = %d ORDER BY idx ASC",
 				(int) $post_id,
 				get_current_blog_id()
 			)
