@@ -52,7 +52,7 @@ class AIIL_Idf {
 		$n  = 0;
 		foreach ( $post_ids as $pid ) {
 			$texts = $wpdb->get_col(
-				$wpdb->prepare( "SELECT text FROM {$table} WHERE post_id = %d AND blog_id = %d", (int) $pid, $blog_id )
+				$wpdb->prepare( "SELECT passage_text FROM {$table} WHERE post_id = %d AND blog_id = %d", (int) $pid, $blog_id )
 			);
 			if ( empty( $texts ) ) {
 				continue;

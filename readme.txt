@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.10.0
+Stable tag: 2.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,11 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.10.1 =
+* CRITICAL: found the real reason some sites could index every post yet never place a single link. The passages table declared a column named "vector", which became a RESERVED WORD in MySQL 9.0 and MariaDB 11.7. On those servers the CREATE TABLE silently failed, so the table never existed, every passage insert failed, and posts were recorded as indexed with no passages behind them — every link then failed the passage-relevance gate and was filed as "Low relevance". Sites on older MySQL were unaffected, which is why this only appeared on some hosts.
+* The columns are renamed to passage_text and embedding, and the table is rebuilt automatically on update. Affected posts are flagged for re-indexing, since passages are derived data and regenerate from a normal re-index.
+* Indexing failures now include the database's own error message, so a schema-level problem can no longer look like an AI or quota problem.
 
 = 2.10.0 =
 * Hardened indexing for large sites (500+ posts), where API rate limits are hit routinely.

@@ -84,13 +84,17 @@ class AIIL_DB {
 			KEY incoming_links (incoming_links)
 		) {$charset_collate};";
 
+		// NOTE: columns are deliberately NOT named "text" or "vector". VECTOR became a reserved
+		// word in MySQL 9.0 / MariaDB 11.7, so `vector LONGTEXT` makes CREATE TABLE fail on newer
+		// hosts — the table is then silently absent and every passage insert fails, which leaves
+		// posts indexed with no passages and no links can ever be placed.
 		$sql[] = "CREATE TABLE {$passages} (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			post_id BIGINT(20) UNSIGNED NOT NULL,
 			blog_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 1,
 			idx INT NOT NULL DEFAULT 0,
-			text TEXT,
-			vector LONGTEXT,
+			passage_text LONGTEXT,
+			embedding LONGTEXT,
 			PRIMARY KEY  (id),
 			KEY post_blog (post_id, blog_id)
 		) {$charset_collate};";

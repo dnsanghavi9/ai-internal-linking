@@ -24,12 +24,42 @@ class AIIL_Activator {
 		}
 
 		self::drop_legacy_schema();
+		self::rebuild_passages_if_needed();
 		self::install_schema();
 		self::ensure_scheduled_events();
 		self::migrate_price_defaults();
 		update_option( 'aiil_db_version', AIIL_VERSION );
 
 		AIIL_Logger::info( 'Database schema upgraded', array( 'version' => AIIL_VERSION ) );
+	}
+
+	/**
+	 * Drop the passages table when it is missing or still uses the old column names.
+	 *
+	 * The original table declared a column called `vector`, which became a reserved word in
+	 * MySQL 9.0 / MariaDB 11.7 — on those hosts the CREATE TABLE failed, so the table never
+	 * existed, every passage insert failed, and the site could index posts yet never place a
+	 * single link. dbDelta cannot rename columns, so we drop and let install_schema() rebuild.
+	 * Passages are fully derived data: re-indexing regenerates them, and nothing else is lost.
+	 */
+	protected static function rebuild_passages_if_needed() {
+		global $wpdb;
+		$table = AIIL_DB::passages_table();
+
+		$exists = (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+		if ( $exists ) {
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}" );
+			if ( is_array( $columns ) && in_array( 'passage_text', $columns, true ) && in_array( 'embedding', $columns, true ) ) {
+				return; // already on the safe schema
+			}
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+		}
+
+		// Force a re-index of everything: without passages a post cannot host a link, and the
+		// stored passage_count would otherwise make the indexer skip them as "already done".
+		$wpdb->query( "UPDATE " . AIIL_DB::posts_table() . " SET passage_count = 0, content_hash = NULL" );
+
+		AIIL_Logger::warning( 'Passages table rebuilt on a safe schema — re-index posts to repopulate it' );
 	}
 
 	/**

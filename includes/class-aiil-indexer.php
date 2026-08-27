@@ -143,8 +143,8 @@ class AIIL_Indexer {
 					'post_id' => $post_id,
 					'blog_id' => $blog_id,
 					'idx'     => (int) $i,
-					'text'    => $text,
-					'vector'  => wp_json_encode( $vectors[ $i ] ),
+					'passage_text' => $text,
+					'embedding'    => wp_json_encode( $vectors[ $i ] ),
 				)
 			);
 			if ( $ok ) {
@@ -156,7 +156,10 @@ class AIIL_Indexer {
 		// Throwing keeps the job in the queue to retry instead of leaving a post that looks fine
 		// but silently poisons every opportunity it takes part in.
 		if ( $stored < 1 ) {
-			throw new Exception( 'No passages could be stored for post ' . $post_id . ' — not marking it indexed.' );
+			// Surface the database's own reason — without it this looks like an AI problem when it
+			// is usually schema-level (a missing table, or a column the server rejects).
+			$db_error = ! empty( $wpdb->last_error ) ? ' DB said: ' . $wpdb->last_error : '';
+			throw new Exception( 'No passages could be stored for post ' . $post_id . ' — not marking it indexed.' . $db_error );
 		}
 
 		// Upsert the post row, preserving link counters on update.
@@ -209,7 +212,7 @@ class AIIL_Indexer {
 		global $wpdb;
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT id, idx, text, vector FROM " . AIIL_DB::passages_table() . " WHERE post_id = %d AND blog_id = %d ORDER BY idx ASC",
+				"SELECT id, idx, passage_text AS text, embedding AS vector FROM " . AIIL_DB::passages_table() . " WHERE post_id = %d AND blog_id = %d ORDER BY idx ASC",
 				(int) $post_id,
 				get_current_blog_id()
 			)
