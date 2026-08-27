@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.10.2
+Stable tag: 2.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,11 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.11.0 =
+* New setting "Candidates Per AI Call" (Settings → AI Verification). Verification can now judge several links in one request instead of one at a time, cutting the wall-clock time of a large verification run several-fold and using far fewer requests against a rate-limited key. Default is 1, so behaviour is unchanged until you raise it.
+* Batching is built so it cannot change outcomes: each batch holds at most ONE candidate per source post (so the per-source allowance is still checked before every judgement and no verdict is bought that the source cannot use), the free cap/budget guards still run per candidate before the call, verdicts are matched by explicit id rather than position, and any candidate the model omits — or a batch that fails outright — falls back to its own single call. The judging criteria are shared verbatim between the single and batched prompts.
+* Suggested rollout: try 5 first and compare your kept/rejected mix and a few anchors against current results before raising it further.
 
 = 2.10.2 =
 * Completes the 2.10.1 fix. Renaming the columns was right, but the passage query then aliased them straight back ("embedding AS vector") — and VECTOR is reserved in MySQL 9 / MariaDB 11.7 even when used as an ALIAS, so the SELECT was still a syntax error and passages were still invisible to link placement. The query and its callers now use the real column names throughout.

@@ -178,12 +178,96 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 		$target_excerpt = (string) ( $ctx['target_excerpt'] ?? '' );
 
 		$prompt = "You are auditing a proposed internal link between two articles on the SAME blog, and CHOOSING the anchor text.\n\n"
-			. "SOURCE article: \"" . $source_title . "\"\n"
-			. "SOURCE passage (the link must go somewhere inside THIS text):\n\"\"\"\n" . mb_substr( $passage, 0, 800 ) . "\n\"\"\"\n\n"
-			. "TARGET article: \"" . $target_title . "\"\n"
-			. "TARGET opening:\n\"" . mb_substr( $target_excerpt, 0, 600 ) . "\"\n\n"
-			. ( '' !== $anchor ? "A mechanical guess for the anchor was: \"" . $anchor . "\" (use it only if it is genuinely good).\n\n" : '' )
-			. "STEP 1 — PAIR relevance: does the TARGET genuinely expand the exact point the passage makes?\n"
+			. $this->candidate_block( $ctx )
+			. self::rerank_rules()
+			. "Return STRICT JSON with EXACTLY these keys: {\"topic_match\":bool,\"product_match\":bool,\"jurisdiction_match\":bool,\"pair_score\":int,\"anchor\":\"verbatim span or empty\",\"anchor_score\":int,\"reason\":\"short phrase\"}.\n"
+			. "Return ONLY the JSON.";
+
+		$json = $this->generate_json( $prompt, 'verify' );
+
+		return self::normalise_verdict( $json );
+	}
+
+	/** One candidate rendered for the prompt (shared by the single and batched paths). */
+	protected function candidate_block( array $ctx, $id = null ) {
+		$anchor = (string) ( $ctx['anchor'] ?? '' );
+		return ( null === $id ? '' : "### CANDIDATE " . $id . "\n" )
+			. "SOURCE article: \"" . (string) ( $ctx['source_title'] ?? '' ) . "\"\n"
+			. "SOURCE passage (the link must go somewhere inside THIS text):\n\"\"\"\n" . mb_substr( (string) ( $ctx['passage'] ?? '' ), 0, 800 ) . "\n\"\"\"\n\n"
+			. "TARGET article: \"" . (string) ( $ctx['target_title'] ?? '' ) . "\"\n"
+			. "TARGET opening:\n\"" . mb_substr( (string) ( $ctx['target_excerpt'] ?? '' ), 0, 600 ) . "\"\n\n"
+			. ( '' !== $anchor ? "A mechanical guess for the anchor was: \"" . $anchor . "\" (use it only if it is genuinely good).\n\n" : "\n" );
+	}
+
+	/** Turn one raw verdict object into the shape the reranker expects. */
+	protected static function normalise_verdict( $json ) {
+		$clamp = function ( $v ) {
+			return max( 0, min( 100, (int) $v ) );
+		};
+		$json = is_array( $json ) ? $json : array();
+
+		return array(
+			'topic_match'        => ! empty( $json['topic_match'] ),
+			'product_match'      => ! isset( $json['product_match'] ) || ! empty( $json['product_match'] ),
+			'jurisdiction_match' => ! isset( $json['jurisdiction_match'] ) || ! empty( $json['jurisdiction_match'] ),
+			'pair_score'         => isset( $json['pair_score'] ) ? $clamp( $json['pair_score'] ) : 0,
+			'anchor'             => isset( $json['anchor'] ) ? trim( (string) $json['anchor'] ) : '',
+			'anchor_score'       => isset( $json['anchor_score'] ) ? $clamp( $json['anchor_score'] ) : 0,
+			'reason'             => isset( $json['reason'] ) ? sanitize_text_field( (string) $json['reason'] ) : '',
+		);
+	}
+
+	/**
+	 * Judge several candidates in ONE request. Same criteria as rerank(); only the transport
+	 * changes. Results are keyed by the caller's id — never by position — and any candidate the
+	 * model omits is simply absent, so the caller can retry it individually.
+	 *
+	 * @param array $items id => ctx
+	 * @return array id => verdict
+	 */
+	public function rerank_batch( array $items ) {
+		if ( empty( $this->api_key ) ) {
+			throw new Exception( 'Gemini API key is not configured.' );
+		}
+		if ( empty( $items ) ) {
+			return array();
+		}
+		if ( count( $items ) === 1 ) {
+			$id = array_key_first( $items );
+			return array( $id => $this->rerank( $items[ $id ] ) );
+		}
+
+		$blocks = '';
+		foreach ( $items as $id => $ctx ) {
+			$blocks .= $this->candidate_block( $ctx, $id );
+		}
+
+		$prompt = "You are auditing proposed internal links between articles on the SAME blog, and CHOOSING the anchor text for each.\n"
+			. "There are " . count( $items ) . " independent candidates below. Judge EACH ONE ON ITS OWN MERITS — a candidate's verdict must not be influenced by the others.\n\n"
+			. $blocks
+			. self::rerank_rules()
+			. "Return STRICT JSON: {\"results\":[{\"id\":<the CANDIDATE number>,\"topic_match\":bool,\"product_match\":bool,\"jurisdiction_match\":bool,\"pair_score\":int,\"anchor\":\"verbatim span or empty\",\"anchor_score\":int,\"reason\":\"short phrase\"}]}\n"
+			. "Include EXACTLY ONE entry for EVERY candidate id listed above, and copy each id exactly. Return ONLY the JSON.";
+
+		$json = $this->generate_json( $prompt, 'verify' );
+		$rows = $json['results'] ?? ( isset( $json[0] ) ? $json : array() );
+
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			if ( ! is_array( $row ) || ! isset( $row['id'] ) ) {
+				continue;
+			}
+			$id = (int) $row['id'];
+			if ( isset( $items[ $id ] ) ) {
+				$out[ $id ] = self::normalise_verdict( $row );
+			}
+		}
+		return $out;
+	}
+
+	/** The judging criteria, shared verbatim by the single and batched prompts. */
+	protected static function rerank_rules() {
+		return "STEP 1 — PAIR relevance: does the TARGET genuinely expand the exact point the passage makes?\n"
 			. "   - topic_match: same subject area.\n"
 			. "   - product_match: same product/service/instrument (a personal loan is NOT a payday loan; ULIP is NOT a mutual fund). true if neither article is about a specific product.\n"
 			. "   - jurisdiction_match: compatible country/legal context (India vs Singapore vs US). true if neither is jurisdiction-specific, or the link is an explicit comparison.\n"
@@ -195,25 +279,7 @@ class AIIL_Gemini_Provider implements AIIL_Provider_Interface {
 			. "   - A single word is allowed ONLY if it is a specific term or named entity (e.g. SIP, ULIP, IPO, bookkeeping) AND no longer phrase exists. NEVER choose a generic, vague, or function word — no adverbs (quietly, simply), no verbs (obtain, document), no fillers (the, this, things, ideas, proper, trading, taxes).\n"
 			. "   - The chosen words, in this sentence, must clearly refer to the TARGET's topic.\n"
 			. "   - If the passage contains no span that both appears verbatim AND specifically denotes the target, return anchor as an empty string \"\".\n"
-			. "   - anchor_score: integer 0-100 for how specific and natural the chosen anchor is (empty anchor = 0).\n\n"
-			. "Return STRICT JSON with EXACTLY these keys: {\"topic_match\":bool,\"product_match\":bool,\"jurisdiction_match\":bool,\"pair_score\":int,\"anchor\":\"verbatim span or empty\",\"anchor_score\":int,\"reason\":\"short phrase\"}.\n"
-			. "Return ONLY the JSON.";
-
-		$json = $this->generate_json( $prompt, 'verify' );
-
-		$clamp = function ( $v ) {
-			return max( 0, min( 100, (int) $v ) );
-		};
-
-		return array(
-			'topic_match'        => ! empty( $json['topic_match'] ),
-			'product_match'      => ! isset( $json['product_match'] ) || ! empty( $json['product_match'] ),
-			'jurisdiction_match' => ! isset( $json['jurisdiction_match'] ) || ! empty( $json['jurisdiction_match'] ),
-			'pair_score'         => isset( $json['pair_score'] ) ? $clamp( $json['pair_score'] ) : 0,
-			'anchor'             => isset( $json['anchor'] ) ? trim( (string) $json['anchor'] ) : '',
-			'anchor_score'       => isset( $json['anchor_score'] ) ? $clamp( $json['anchor_score'] ) : 0,
-			'reason'             => isset( $json['reason'] ) ? sanitize_text_field( (string) $json['reason'] ) : '',
-		);
+			. "   - anchor_score: integer 0-100 for how specific and natural the chosen anchor is (empty anchor = 0).\n\n";
 	}
 
 	protected function generate_json( $prompt, $call_type = 'generate' ) {

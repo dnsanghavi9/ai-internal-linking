@@ -29,13 +29,21 @@ class AIIL_Reranker {
 		$t     = AIIL_DB::opportunities_table();
 		$limit = max( 1, (int) $limit );
 
+		$per_call = (int) AIIL_Settings::get( 'rerank_candidates_per_call', 1 );
+		$out      = array( 'processed' => 0, 'kept' => 0, 'rejected' => 0, 'rewrite' => 0, 'capped' => 0, 'inserted' => 0 );
+
+		if ( $per_call > 1 ) {
+			$out = self::verify_grouped( $limit * $per_call, $per_call, $out );
+			$out['remaining'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'ready'" );
+			return $out;
+		}
+
 		// Highest-confidence candidates first so each source's strongest links are reviewed
 		// before its weaker ones (which matters for the per-source cap + reciprocal blocking).
 		$ids = $wpdb->get_col(
 			$wpdb->prepare( "SELECT id FROM {$t} WHERE status = 'ready' ORDER BY confidence DESC, id ASC LIMIT %d", $limit )
 		);
 
-		$out = array( 'processed' => 0, 'kept' => 0, 'rejected' => 0, 'rewrite' => 0, 'capped' => 0, 'inserted' => 0 );
 		foreach ( $ids as $id ) {
 			$res = self::verify_opportunity( (int) $id );
 			if ( null === $res ) {
@@ -50,6 +58,167 @@ class AIIL_Reranker {
 
 		$out['remaining'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'ready'" );
 		return $out;
+	}
+
+	/**
+	 * Judge several candidates per API call — far fewer round trips, and fewer requests against a
+	 * rate-limited key. Correctness is preserved by construction:
+	 *
+	 *  - a batch holds at most ONE candidate per source post, so the per-source allowance is
+	 *    still checked before every judgement and we never buy verdicts a source cannot use;
+	 *  - the cheap cap/budget guards still run per candidate BEFORE the call;
+	 *  - verdicts are matched by id, never by position;
+	 *  - any candidate the model omits falls back to its own single call.
+	 */
+	protected static function verify_grouped( $pool_size, $per_call, array $out ) {
+		global $wpdb;
+		$t = AIIL_DB::opportunities_table();
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, source_post_id FROM {$t} WHERE status = 'ready' ORDER BY confidence DESC, id ASC LIMIT %d",
+				max( 1, (int) $pool_size ) * 4 // oversample: most rows share a source
+			)
+		);
+		if ( empty( $rows ) ) {
+			return $out;
+		}
+
+		// One candidate per source, strongest first.
+		$picked = array();
+		$seen   = array();
+		foreach ( $rows as $r ) {
+			$src = (int) $r->source_post_id;
+			if ( isset( $seen[ $src ] ) ) {
+				continue;
+			}
+			$seen[ $src ] = true;
+			$picked[]     = (int) $r->id;
+			if ( count( $picked ) >= $per_call ) {
+				break;
+			}
+		}
+
+		// Prepare each candidate; the free cap/budget guards may settle some without any AI call.
+		$items = array();
+		$ctxs  = array();
+		foreach ( $picked as $id ) {
+			$prepared = self::prepare_candidate( $id );
+			if ( 'capped' === $prepared ) {
+				$out['processed']++;
+				$out['capped']++;
+				continue;
+			}
+			if ( ! is_array( $prepared ) ) {
+				continue; // invalid / no longer ready
+			}
+			$items[ $id ] = $prepared['ctx'];
+			$ctxs[ $id ]  = $prepared;
+		}
+		if ( empty( $items ) ) {
+			return $out;
+		}
+
+		try {
+			$verdicts = AIIL_Indexer::provider()->rerank_batch( $items );
+		} catch ( Exception $e ) {
+			AIIL_Logger::warning( 'Batched AI rerank failed — falling back to single calls', array( 'error' => $e->getMessage(), 'candidates' => count( $items ) ) );
+			$verdicts = array();
+		}
+
+		foreach ( $ctxs as $id => $prepared ) {
+			if ( isset( $verdicts[ $id ] ) ) {
+				$res = self::apply_verdict( $prepared['opp'], $prepared['target'], $prepared['signals'], $prepared['passage'], $verdicts[ $id ] );
+			} else {
+				// Model skipped it (or the whole batch failed) — judge it on its own.
+				$res = self::verify_opportunity( $id );
+			}
+			if ( null === $res ) {
+				continue;
+			}
+			$out['processed']++;
+			$out[ $res['result'] ] = ( $out[ $res['result'] ] ?? 0 ) + 1;
+			if ( ! empty( $res['inserted'] ) ) {
+				$out['inserted']++;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Load a ready candidate and run the free pre-checks.
+	 *
+	 * @return array{opp:object,target:WP_Post,signals:array,passage:string,ctx:array}|'capped'|null
+	 */
+	protected static function prepare_candidate( $opportunity_id ) {
+		global $wpdb;
+		$t   = AIIL_DB::opportunities_table();
+		$opp = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE id = %d", (int) $opportunity_id ) );
+		if ( ! $opp || 'ready' !== $opp->status ) {
+			return null;
+		}
+
+		$source = get_post( (int) $opp->source_post_id );
+		$target = get_post( (int) $opp->target_post_id );
+		if ( ! $source || ! $target ) {
+			$wpdb->update( $t, array( 'status' => 'invalid' ), array( 'id' => (int) $opportunity_id ) );
+			return null;
+		}
+
+		if ( self::should_cap( (int) $opp->source_post_id ) ) {
+			$wpdb->update( $t, array( 'status' => 'capped' ), array( 'id' => (int) $opportunity_id ) );
+			AIIL_Placement::clear_stash( (int) $opportunity_id );
+			return 'capped';
+		}
+
+		$signals = json_decode( (string) $opp->signals, true );
+		$signals = is_array( $signals ) ? $signals : array();
+		$passage = isset( $signals['best_passage'] ) ? (string) $signals['best_passage'] : '';
+
+		return array(
+			'opp'     => $opp,
+			'target'  => $target,
+			'signals' => $signals,
+			'passage' => $passage,
+			'ctx'     => array(
+				'source_title'   => $source->post_title,
+				'passage'        => $passage,
+				'anchor'         => (string) $opp->anchor_text,
+				'target_title'   => $target->post_title,
+				'target_excerpt' => self::excerpt( (int) $target->ID, $target ),
+			),
+		);
+	}
+
+	/**
+	 * Has this source already earned its full allowance of links, or spent its AI budget?
+	 * Both are answered from the database, so a capped candidate never costs an API call.
+	 */
+	protected static function should_cap( $source_post_id ) {
+		global $wpdb;
+		$t   = AIIL_DB::opportunities_table();
+		$sid = (int) $source_post_id;
+
+		$already = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT outgoing_links FROM " . AIIL_DB::posts_table() . " WHERE post_id = %d AND blog_id = %d", $sid, get_current_blog_id() )
+		);
+		$slots = max( 0, (int) AIIL_Settings::get( 'max_outgoing_links', 3 ) - $already );
+
+		$verified_ct = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE source_post_id = %d AND status = 'verified'", $sid )
+		);
+		if ( $verified_ct >= $slots ) {
+			return true;
+		}
+
+		$reranked_ct = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$t} WHERE source_post_id = %d AND status IN ('verified','rejected_relevance','rewrite_suggested')",
+				$sid
+			)
+		);
+		return $reranked_ct >= (int) AIIL_Settings::get( 'rerank_budget', 8 );
 	}
 
 	/**
@@ -74,26 +243,10 @@ class AIIL_Reranker {
 			return null;
 		}
 
-		$sid       = (int) $opp->source_post_id;
-		$max        = (int) AIIL_Settings::get( 'max_outgoing_links', 3 );
-		$budget     = (int) AIIL_Settings::get( 'rerank_budget', 8 );
-		$blog_id    = get_current_blog_id();
-		$already    = (int) $wpdb->get_var(
-			$wpdb->prepare( "SELECT outgoing_links FROM " . AIIL_DB::posts_table() . " WHERE post_id = %d AND blog_id = %d", $sid, $blog_id )
-		);
-		$slots      = max( 0, $max - $already );
-		$verified_ct = (int) $wpdb->get_var(
-			$wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE source_post_id = %d AND status = 'verified'", $sid )
-		);
-		$reranked_ct = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$t} WHERE source_post_id = %d AND status IN ('verified','rejected_relevance','rewrite_suggested')",
-				$sid
-			)
-		);
+		$sid = (int) $opp->source_post_id;
 
 		// Cap without spending an AI call: allowance already met, or budget exhausted.
-		if ( $verified_ct >= $slots || $reranked_ct >= $budget ) {
+		if ( self::should_cap( $sid ) ) {
 			$wpdb->update( $t, array( 'status' => 'capped' ), array( 'id' => (int) $opportunity_id ) );
 			AIIL_Placement::clear_stash( (int) $opportunity_id );
 			return array( 'result' => 'capped', 'inserted' => false );
@@ -117,6 +270,21 @@ class AIIL_Reranker {
 			AIIL_Logger::warning( 'AI rerank failed', array( 'opportunity_id' => $opportunity_id, 'error' => $e->getMessage() ) );
 			return null; // leave as ready; a later pass can retry
 		}
+
+		return self::apply_verdict( $opp, $target, $signals, $passage, $v );
+	}
+
+	/**
+	 * Turn one AI verdict into a decision. Shared by the single-call and batched paths so both
+	 * apply exactly the same grounding, refining, weak-anchor and threshold rules.
+	 *
+	 * @return array{result:string,inserted:bool}
+	 */
+	protected static function apply_verdict( $opp, $target, array $signals, $passage, array $v ) {
+		global $wpdb;
+		$t              = AIIL_DB::opportunities_table();
+		$opportunity_id = (int) $opp->id;
+		$sid            = (int) $opp->source_post_id;
 
 		$pair_min = (int) AIIL_Settings::get( 'rerank_pair_min', 75 );
 

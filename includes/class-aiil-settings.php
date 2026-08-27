@@ -22,6 +22,7 @@ class AIIL_Settings {
 			'use_ai_anchor'       => 0,    // AI fallback to pick anchor / suggest rewrite (opt-in, small cost)
 			'use_ai_rerank'       => 0,    // AI verify step over READY links (opt-in; judges usefulness/jurisdiction/product)
 			'rerank_budget'       => 8,    // max AI verify calls per source (backfills until max_outgoing_links kept)
+			'rerank_candidates_per_call' => 1, // judge N candidates per API call (1 = one at a time)
 			'rerank_pair_min'     => 75,   // 0-100; pair usefulness below this -> reject
 			'rerank_anchor_min'   => 70,   // 0-100; safety floor only — the AI picks the anchor, so
 			                               // this should stay low. Below it -> needs a human.
@@ -87,6 +88,7 @@ class AIIL_Settings {
 		$out['use_ai_anchor']       = empty( $input['use_ai_anchor'] ) ? 0 : 1;
 		$out['use_ai_rerank']       = empty( $input['use_ai_rerank'] ) ? 0 : 1;
 		$out['rerank_budget']       = min( 20, max( 1, (int) ( $input['rerank_budget'] ?? 8 ) ) );
+		$out['rerank_candidates_per_call'] = min( 20, max( 1, (int) ( $input['rerank_candidates_per_call'] ?? 1 ) ) );
 		$out['rerank_pair_min']     = min( 100, max( 0, (int) ( $input['rerank_pair_min'] ?? 75 ) ) );
 		$out['rerank_anchor_min']   = min( 100, max( 0, (int) ( $input['rerank_anchor_min'] ?? 70 ) ) );
 		$out['bold_links']          = empty( $input['bold_links'] ) ? 0 : 1;

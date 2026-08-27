@@ -43,4 +43,13 @@ interface AIIL_Provider_Interface {
 	 * @return array { @type bool $keep, @type int $score (0-100 usefulness), @type string $reason }
 	 */
 	public function rerank( array $ctx );
+
+	/**
+	 * Judge several candidates in one request, using the same criteria as rerank().
+	 *
+	 * @param array $items id => ctx
+	 * @return array id => verdict, keyed by the caller's id. A candidate the model omits is
+	 *               simply absent, so the caller can retry it on its own.
+	 */
+	public function rerank_batch( array $items );
 }

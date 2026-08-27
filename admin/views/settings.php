@@ -197,6 +197,13 @@ $settings = AIIL_Settings::all();
 				</td>
 			</tr>
 			<tr>
+				<th><label for="aiil_rerank_candidates_per_call"><?php esc_html_e( 'Candidates Per AI Call', 'ai-internal-linking' ); ?></label></th>
+				<td>
+					<input type="number" id="aiil_rerank_candidates_per_call" name="aiil[rerank_candidates_per_call]" value="<?php echo esc_attr( $settings['rerank_candidates_per_call'] ); ?>" min="1" max="20" step="1" />
+					<p class="description"><?php esc_html_e( 'How many links the AI judges in a single request. 1 (default) sends one at a time. Raising this makes verification several times faster on a large site and uses fewer requests against a rate-limited key — the same criteria are applied either way, and each batch holds at most one candidate per source post so nothing is judged that the source cannot use. Try 5 and compare your kept/rejected mix before going higher.', 'ai-internal-linking' ); ?></p>
+				</td>
+			</tr>
+			<tr>
 				<th><label for="aiil_rerank_pair_min"><?php esc_html_e( 'Min Pair Score', 'ai-internal-linking' ); ?></label></th>
 				<td>
 					<input type="number" id="aiil_rerank_pair_min" name="aiil[rerank_pair_min]" value="<?php echo esc_attr( $settings['rerank_pair_min'] ); ?>" min="0" max="100" step="1" />
