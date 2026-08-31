@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       AI Internal Linking
  * Description:       Retrieval-based internal linking. Embeds every post at the passage level, matches posts by semantic similarity, and grounds each link anchor in a real source sentence. No topic lists, no per-niche configuration.
- * Version:           2.12.0
+ * Version:           2.13.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Sanghavi Devarsh
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AIIL_VERSION', '2.12.0' );
+define( 'AIIL_VERSION', '2.13.0' );
 define( 'AIIL_PLUGIN_FILE', __FILE__ );
 define( 'AIIL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AIIL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

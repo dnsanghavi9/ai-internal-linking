@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.12.0
+Stable tag: 2.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,10 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.13.0 =
+* New "Index health" panel on the Dashboard answers "is indexing actually done?" with evidence rather than a status flag. It verifies passages really exist rather than trusting the indexed marker, so it catches the case where a post is marked indexed but has no passages behind it — posts in that state cannot host a link and quietly fail every suggestion as "Low relevance". Shows fully-indexed vs not-yet-indexed vs broken, plus failed jobs.
+* The same figures are included in the JSON export (meta.index_health), so a whole fleet can be checked without opening each site.
 
 = 2.12.0 =
 * New Dashboard option: "Build index only (no suggestions for old posts)". Use it when you only want posts published from now on to be linked. It creates the embeddings for your existing library — which is required, because a new post can only be matched against posts that have been indexed — but generates no link suggestions for that library, so there is no review pile and no AI verification spend on old content. Cost is embeddings only, once per post. New posts then link themselves automatically via Auto-Link New Posts.

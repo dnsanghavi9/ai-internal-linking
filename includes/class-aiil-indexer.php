@@ -189,6 +189,66 @@ class AIIL_Indexer {
 		return array( 'passage_count' => $stored );
 	}
 
+	/**
+	 * Is the index actually complete and usable?
+	 *
+	 * Counting rows marked "indexed" is not enough — a post can carry an indexed_at timestamp
+	 * while having no passage rows behind it, and such a post silently poisons every link it
+	 * takes part in (it can never host one). This verifies passages really exist, so the answer
+	 * to "did indexing work?" is evidence rather than a status flag.
+	 *
+	 * @return array{published:int,ready:int,missing:int,no_passages:int,passages:int,failed_jobs:int}
+	 */
+	public static function health() {
+		global $wpdb;
+		$blog_id  = get_current_blog_id();
+		$posts    = AIIL_DB::posts_table();
+		$passages = AIIL_DB::passages_table();
+
+		$published = (int) $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type = 'post'"
+		);
+
+		// Indexed AND provably has passages.
+		$ready = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$posts} m
+				 INNER JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_status = 'publish' AND p.post_type = 'post'
+				 WHERE m.blog_id = %d AND m.indexed_at IS NOT NULL
+				   AND EXISTS ( SELECT 1 FROM {$passages} s WHERE s.post_id = m.post_id AND s.blog_id = m.blog_id )",
+				$blog_id
+			)
+		);
+
+		// Marked indexed but with nothing to link from — the failure mode worth surfacing.
+		$no_passages = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$posts} m
+				 INNER JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_status = 'publish' AND p.post_type = 'post'
+				 WHERE m.blog_id = %d AND m.indexed_at IS NOT NULL
+				   AND NOT EXISTS ( SELECT 1 FROM {$passages} s WHERE s.post_id = m.post_id AND s.blog_id = m.blog_id )",
+				$blog_id
+			)
+		);
+
+		$total_passages = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$passages} WHERE blog_id = %d", $blog_id )
+		);
+
+		$failed = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM " . AIIL_DB::queue_table() . " WHERE status = %s", AIIL_Queue::STATUS_FAILED )
+		);
+
+		return array(
+			'published'   => $published,
+			'ready'       => $ready,
+			'missing'     => max( 0, $published - $ready - $no_passages ),
+			'no_passages' => $no_passages,
+			'passages'    => $total_passages,
+			'failed_jobs' => $failed,
+		);
+	}
+
 	public static function delete( $post_id ) {
 		global $wpdb;
 		$blog_id = get_current_blog_id();

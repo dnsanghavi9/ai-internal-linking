@@ -162,6 +162,45 @@ $step3_done = $rerank_on ? ( 0 === $awaiting && $ready_insert > 0 ) : $step2_don
 	</div>
 
 	<!-- ============================ AT A GLANCE ============================ -->
+	<!-- ============ INDEX HEALTH ============ -->
+	<?php $health = AIIL_Indexer::health(); ?>
+	<div class="aiil-panel">
+		<h2><?php esc_html_e( 'Index health', 'ai-internal-linking' ); ?></h2>
+		<?php if ( 0 === $health['published'] ) : ?>
+			<p class="description"><?php esc_html_e( 'No published posts yet.', 'ai-internal-linking' ); ?></p>
+		<?php elseif ( $health['ready'] === $health['published'] && 0 === $health['failed_jobs'] ) : ?>
+			<p>
+				<strong style="color:#008a20">✓ <?php esc_html_e( 'All posts indexed.', 'ai-internal-linking' ); ?></strong>
+				<?php
+				printf(
+					esc_html__( '%1$d of %1$d posts have embeddings and %2$s passages stored. New posts will be linked automatically.', 'ai-internal-linking' ),
+					(int) $health['published'],
+					esc_html( number_format_i18n( $health['passages'] ) )
+				);
+				?>
+			</p>
+		<?php else : ?>
+			<p><strong><?php esc_html_e( 'Indexing is not complete yet:', 'ai-internal-linking' ); ?></strong></p>
+			<ul style="margin-left:18px;list-style:disc">
+				<li>
+					<?php printf( esc_html__( '%1$d of %2$d posts fully indexed (embeddings + passages stored).', 'ai-internal-linking' ), (int) $health['ready'], (int) $health['published'] ); ?>
+				</li>
+				<?php if ( $health['missing'] > 0 ) : ?>
+					<li><?php printf( esc_html__( '%d posts not indexed yet — run the pipeline, or "Build index only" if you just want new posts linked.', 'ai-internal-linking' ), (int) $health['missing'] ); ?></li>
+				<?php endif; ?>
+				<?php if ( $health['no_passages'] > 0 ) : ?>
+					<li style="color:#b32d2e">
+						<strong><?php printf( esc_html__( '%d posts are marked indexed but have NO passages stored.', 'ai-internal-linking' ), (int) $health['no_passages'] ); ?></strong>
+						<?php esc_html_e( 'Those posts cannot host a link, so every suggestion involving them fails as "Low relevance". Re-index to repair them; if it persists, check the Logs tab for the database error.', 'ai-internal-linking' ); ?>
+					</li>
+				<?php endif; ?>
+				<?php if ( $health['failed_jobs'] > 0 ) : ?>
+					<li><?php printf( esc_html__( '%d queued jobs failed — use "Retry failed jobs" above.', 'ai-internal-linking' ), (int) $health['failed_jobs'] ); ?></li>
+				<?php endif; ?>
+			</ul>
+		<?php endif; ?>
+	</div>
+
 	<!-- ============ NEW POSTS ONLY ============ -->
 	<div class="aiil-panel">
 		<h2><?php esc_html_e( 'Only link new posts', 'ai-internal-linking' ); ?></h2>

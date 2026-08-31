@@ -72,6 +72,7 @@ class AIIL_Export {
 				'scanned_site_links'   => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM " . AIIL_DB::site_links_table() . " WHERE blog_id = %d", get_current_blog_id() ) ),
 				'orphans'              => AIIL_Orphans::count(),
 			),
+			'index_health'    => AIIL_Indexer::health(),
 			'orphan_source'   => AIIL_Link_Scanner::has_scan() ? 'scanned_site_links' : 'plugin_links_only',
 			'last_link_scan'  => AIIL_Link_Scanner::last_scan(),
 			'row_cap'         => self::ROW_CAP,
