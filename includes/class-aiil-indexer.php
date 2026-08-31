@@ -227,7 +227,16 @@ class AIIL_Indexer {
 	 *
 	 * @return int
 	 */
-	public static function enqueue_all() {
+	/**
+	 * Queue every published post for indexing.
+	 *
+	 * @param bool $index_only Build embeddings only, without generating link suggestions for the
+	 *                         existing library. Use this when you only want NEW posts to be
+	 *                         linked: the old posts still need vectors so a new post can be
+	 *                         matched against them, but nothing is proposed for them.
+	 * @return int
+	 */
+	public static function enqueue_all( $index_only = false ) {
 		global $wpdb;
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
@@ -236,10 +245,11 @@ class AIIL_Indexer {
 				'post'
 			)
 		);
+		$payload = $index_only ? array( 'index_only' => 1 ) : array();
 		foreach ( $ids as $id ) {
-			AIIL_Queue::enqueue( AIIL_Queue::JOB_INDEX_POST, (int) $id );
+			AIIL_Queue::enqueue( AIIL_Queue::JOB_INDEX_POST, (int) $id, $payload );
 		}
-		AIIL_Logger::info( 'Enqueued indexing', array( 'count' => count( $ids ) ) );
+		AIIL_Logger::info( 'Enqueued indexing', array( 'count' => count( $ids ), 'index_only' => (bool) $index_only ) );
 		return count( $ids );
 	}
 }

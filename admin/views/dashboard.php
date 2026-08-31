@@ -50,6 +50,12 @@ $step3_done = $rerank_on ? ( 0 === $awaiting && $ready_insert > 0 ) : $step2_don
 		<?php echo AIIL_Admin::export_button( 'eval', __( 'Run eval (JSON)', 'ai-internal-linking' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 	</p>
 
+	<?php if ( isset( $_GET['index_only'] ) ) : ?>
+		<div class="notice notice-success is-dismissible"><p>
+			<?php printf( esc_html__( 'Queued %d posts for indexing only — no link suggestions will be created for them. Run the pipeline (or let cron work through it), then publish a post and it will link itself automatically.', 'ai-internal-linking' ), (int) ( $_GET['queued'] ?? 0 ) ); ?>
+		</p></div>
+	<?php endif; ?>
+
 	<?php if ( isset( $_GET['requeued'] ) ) : ?>
 		<div class="notice notice-success is-dismissible"><p>
 			<?php printf( esc_html__( 'Requeued %d failed job(s). Run the pipeline to process them.', 'ai-internal-linking' ), (int) $_GET['requeued'] ); ?>
@@ -156,6 +162,32 @@ $step3_done = $rerank_on ? ( 0 === $awaiting && $ready_insert > 0 ) : $step2_don
 	</div>
 
 	<!-- ============================ AT A GLANCE ============================ -->
+	<!-- ============ NEW POSTS ONLY ============ -->
+	<div class="aiil-panel">
+		<h2><?php esc_html_e( 'Only link new posts', 'ai-internal-linking' ); ?></h2>
+		<p class="description">
+			<?php esc_html_e( 'Leave your existing posts exactly as they are, and only link posts you publish from now on. This builds the search index for your back catalogue — which is required, because a new post can only be matched against posts that have been indexed — but proposes no links for them, so there is no review pile and no AI verification spend on old content.', 'ai-internal-linking' ); ?>
+		</p>
+		<p class="description">
+			<strong><?php esc_html_e( 'Cost:', 'ai-internal-linking' ); ?></strong>
+			<?php esc_html_e( 'embeddings only, once per post (a fraction of a cent each). Nothing else runs until you publish something.', 'ai-internal-linking' ); ?>
+		</p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<input type="hidden" name="action" value="aiil_index_only" />
+			<?php wp_nonce_field( AIIL_Admin::NONCE ); ?>
+			<?php submit_button( __( 'Build index only (no suggestions for old posts)', 'ai-internal-linking' ), 'secondary', 'submit', false ); ?>
+		</form>
+		<p class="description" style="margin-top:8px">
+			<?php
+			printf(
+				/* translators: %s: on/off state of the Auto-Link New Posts setting */
+				esc_html__( 'After indexing, every new post links itself automatically. Auto-Link New Posts is currently %s.', 'ai-internal-linking' ),
+				(int) AIIL_Settings::get( 'auto_link_new', 1 ) === 1 ? esc_html__( 'ON', 'ai-internal-linking' ) : esc_html__( 'OFF — turn it on in Settings', 'ai-internal-linking' )
+			);
+			?>
+		</p>
+	</div>
+
 	<div class="aiil-stats">
 		<div class="aiil-stat"><span class="n"><?php echo esc_html( $ready_insert ); ?></span><span class="l"><?php esc_html_e( 'Ready to insert', 'ai-internal-linking' ); ?></span></div>
 		<div class="aiil-stat"><span class="n"><?php echo esc_html( $not_linked ); ?></span><span class="l"><?php esc_html_e( 'Not linked', 'ai-internal-linking' ); ?></span></div>

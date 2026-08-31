@@ -300,7 +300,12 @@ class AIIL_Queue {
 					if ( $indexed && empty( $indexed['skipped'] ) ) {
 						AIIL_Matcher::flush_cache();
 						AIIL_Idf::flush(); // corpus changed; rebuild specificity map lazily
-						AIIL_Queue::enqueue( self::JOB_GENERATE_MATCHES, (int) $job->post_id, array( 'auto' => ! empty( $payload['auto'] ) ? 1 : 0 ) );
+						// index_only builds the vectors but proposes nothing for the existing
+						// library — the post is still fully matchable, so a NEW post published
+						// later can link to it and be linked from it.
+						if ( empty( $payload['index_only'] ) ) {
+							AIIL_Queue::enqueue( self::JOB_GENERATE_MATCHES, (int) $job->post_id, array( 'auto' => ! empty( $payload['auto'] ) ? 1 : 0 ) );
+						}
 					}
 					break;
 

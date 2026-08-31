@@ -23,6 +23,7 @@ class AIIL_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_aiil_save_settings', array( $this, 'handle_save_settings' ) );
 		add_action( 'admin_post_aiil_initial_scan', array( $this, 'handle_initial_scan' ) );
+		add_action( 'admin_post_aiil_index_only', array( $this, 'handle_index_only' ) );
 		add_action( 'admin_post_aiil_index_post', array( $this, 'handle_index_post' ) );
 		add_action( 'admin_post_aiil_opportunity_action', array( $this, 'handle_opportunity_action' ) );
 		add_action( 'admin_post_aiil_orphan_find', array( $this, 'handle_orphan_find' ) );
@@ -188,6 +189,19 @@ class AIIL_Admin {
 		// separate "force" path — enqueue every published post and let the worker decide.
 		$count = AIIL_Indexer::enqueue_all();
 		$this->redirect( '', array( 'queued' => $count ) );
+	}
+
+	/**
+	 * Build embeddings for the existing library WITHOUT proposing links for it. Everything stays
+	 * matchable, so newly published posts can link to and from these posts — but no suggestions
+	 * (and no AI verification spend) are generated for the back catalogue.
+	 */
+	public function handle_index_only() {
+		$this->check_cap();
+		check_admin_referer( self::NONCE );
+
+		$count = AIIL_Indexer::enqueue_all( true );
+		$this->redirect( '', array( 'queued' => $count, 'index_only' => 1 ) );
 	}
 
 	public function handle_index_post() {

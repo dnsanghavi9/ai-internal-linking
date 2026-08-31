@@ -4,7 +4,7 @@ Tags: internal links, seo, ai, gemini, embeddings, content
 Requires at least: 5.8
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.11.0
+Stable tag: 2.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,9 @@ Features:
 5. Open **Link Opportunities** and use **Prepare all pending anchors**, then review.
 
 == Changelog ==
+
+= 2.12.0 =
+* New Dashboard option: "Build index only (no suggestions for old posts)". Use it when you only want posts published from now on to be linked. It creates the embeddings for your existing library — which is required, because a new post can only be matched against posts that have been indexed — but generates no link suggestions for that library, so there is no review pile and no AI verification spend on old content. Cost is embeddings only, once per post. New posts then link themselves automatically via Auto-Link New Posts.
 
 = 2.11.0 =
 * New setting "Candidates Per AI Call" (Settings → AI Verification). Verification can now judge several links in one request instead of one at a time, cutting the wall-clock time of a large verification run several-fold and using far fewer requests against a rate-limited key. Default is 1, so behaviour is unchanged until you raise it.
